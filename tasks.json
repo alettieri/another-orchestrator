@@ -1,0 +1,381 @@
+{
+  "project": {
+    "name": "agent-orchestrator",
+    "description": "Lightweight two-part system for autonomous software development. An LLM planner organizes work from project management tools, and a deterministic state machine executes that work by dispatching headless coding agents through YAML-defined workflows.",
+    "language": "TypeScript",
+    "runtime": "Node.js",
+    "rootDir": "."
+  },
+  "sharedContext": {
+    "conventions": [
+      "Use Zod for all schema validation and type inference (z.infer<typeof Schema>)",
+      "Use named exports, not default exports",
+      "Use async/await throughout, no callbacks",
+      "Use path.resolve and path.join for all file paths",
+      "Use fs/promises (not sync fs) for all file I/O",
+      "Error handling: throw typed errors, let callers decide recovery",
+      "Use console-level logging via the logger utility, not raw console.log",
+      "All config paths are relative to the orchestrator repo root and resolved at load time",
+      "Template variables use {{variable}} syntax (Nunjucks)",
+      "State files are the contract between planner and runner — planner writes, runner reads/updates"
+    ],
+    "coreTypes": {
+      "note": "These are the canonical type shapes all modules must conform to. Task 02 (core-types) produces the Zod schemas. Other tasks should code against these shapes.",
+      "OrchestratorConfig": {
+        "defaultAgent": "string",
+        "agents": "Record<string, { command: string, defaultArgs: string[] }>",
+        "stateDir": "string",
+        "logDir": "string",
+        "workflowDir": "string",
+        "promptDir": "string",
+        "scriptDir": "string",
+        "pollInterval": "number (seconds, default 10)",
+        "maxConcurrency": "number (default 3)",
+        "ghCommand": "string (default 'gh')"
+      },
+      "PlanFile": {
+        "id": "string (slug, matches directory name)",
+        "name": "string",
+        "createdAt": "string (ISO 8601)",
+        "createdBy": "string",
+        "repo": "string (absolute path to target repo)",
+        "workflow": "string (workflow name from registry)",
+        "agent": "string | null (agent provider name)",
+        "worktreeRoot": "string (absolute path)",
+        "status": "'active' | 'paused' | 'complete'",
+        "tickets": "Array<{ ticketId: string, order: number, blockedBy: string[] }>"
+      },
+      "TicketState": {
+        "planId": "string",
+        "ticketId": "string",
+        "title": "string",
+        "description": "string",
+        "acceptanceCriteria": "string[]",
+        "linearUrl": "string | null",
+        "repo": "string (absolute path, overrides plan)",
+        "workflow": "string (overrides plan)",
+        "branch": "string",
+        "worktree": "string (absolute path)",
+        "agent": "string | null (overrides plan)",
+        "status": "'queued' | 'ready' | 'running' | 'paused' | 'complete' | 'failed' | 'needs_attention'",
+        "currentPhase": "string (phase ID from workflow)",
+        "phaseHistory": "Array<{ phase: string, status: string, startedAt: string, completedAt: string | null, output?: string }>",
+        "context": "Record<string, string> (accumulated captured values)",
+        "retries": "Record<string, number> (phase ID → retry count)",
+        "error": "string | null"
+      },
+      "WorkflowDefinition": {
+        "name": "string",
+        "description": "string",
+        "phases": "PhaseDefinition[]"
+      },
+      "PhaseDefinition": {
+        "id": "string",
+        "type": "'script' | 'agent' | 'poll' | 'terminal'",
+        "command?": "string (for script/poll phases)",
+        "args?": "string[] (for script/poll, supports {{var}} interpolation)",
+        "promptTemplate?": "string (for agent phases, filename in prompts/)",
+        "allowedTools?": "string[] (for agent phases)",
+        "maxTurns?": "number (for agent phases)",
+        "maxRetries?": "number",
+        "agent?": "string | null (phase-level agent override)",
+        "intervalSeconds?": "number (for poll phases)",
+        "timeoutSeconds?": "number (for poll phases)",
+        "capture?": "Record<string, string> (key → shell command or 'stdout')",
+        "notify?": "boolean (for terminal phases)",
+        "onSuccess?": "string (next phase ID)",
+        "onFailure?": "string (next phase ID, 'retry', or 'abort')"
+      },
+      "WorkflowRegistryEntry": {
+        "name": "string",
+        "file": "string",
+        "description": "string",
+        "tags": "string[]"
+      }
+    }
+  },
+  "tasks": [
+    {
+      "id": "01-project-scaffolding",
+      "name": "Project Scaffolding",
+      "description": "Set up the TypeScript project foundation: package.json, tsconfig.json, .gitignore, and create all directories. This task creates the skeleton that all other tasks build on.",
+      "files": [
+        "package.json",
+        "tsconfig.json",
+        ".gitignore",
+        "orchestrator.yaml"
+      ],
+      "dependsOn": [],
+      "priority": 0,
+      "estimatedComplexity": "low",
+      "prompt": "Create the project scaffolding for a TypeScript CLI called 'agent-orchestrator'. Create the following files:\n\n1. **package.json**:\n   - name: agent-orchestrator\n   - type: module\n   - bin: { \"orchestrator\": \"./dist/cli.js\" }\n   - scripts: { \"build\": \"tsc\", \"dev\": \"tsx src/cli.ts\", \"start\": \"node dist/cli.js\" }\n   - dependencies: yaml, nunjucks, commander, chalk, zod, chokidar\n   - devDependencies: typescript, tsx, @types/node, @types/nunjucks\n\n2. **tsconfig.json**:\n   - target: ES2022, module: Node16, moduleResolution: Node16\n   - outDir: ./dist, rootDir: ./src\n   - strict: true, esModuleInterop: true, skipLibCheck: true\n   - declaration: true\n\n3. **.gitignore**:\n   - node_modules/, dist/, state/, logs/, *.log\n\n4. **orchestrator.yaml** (default config):\n   ```yaml\n   defaultAgent: claude\n   agents:\n     claude:\n       command: claude\n       defaultArgs:\n         - \"--dangerously-skip-permissions\"\n     codex:\n       command: codex\n       defaultArgs:\n         - \"--approval-mode\"\n         - \"never\"\n   stateDir: ./state\n   logDir: ./logs\n   workflowDir: ./workflows\n   promptDir: ./prompts\n   scriptDir: ./scripts\n   pollInterval: 10\n   maxConcurrency: 3\n   ghCommand: gh\n   ```\n\n5. Create empty directories (with .gitkeep where appropriate):\n   - src/core/\n   - src/agents/\n   - src/phases/\n   - src/utils/\n   - workflows/\n   - prompts/\n   - scripts/\n   - skills/planner/\n   - skills/workflows/\n   - skills/providers/linear/\n   - skills/providers/github-issues/\n   - schemas/\n\nRun `npm install` after creating package.json."
+    },
+    {
+      "id": "02-core-types",
+      "name": "Zod Schemas & Types",
+      "description": "Define all Zod schemas and TypeScript types that form the contract between all modules. This is the single source of truth for data shapes.",
+      "files": [
+        "src/core/types.ts"
+      ],
+      "dependsOn": ["01-project-scaffolding"],
+      "priority": 0,
+      "estimatedComplexity": "medium",
+      "prompt": "Create `src/core/types.ts` with all Zod schemas and inferred TypeScript types for the agent orchestrator. Use `z.infer<typeof Schema>` for all type exports. Use named exports.\n\nDefine the following schemas:\n\n1. **AgentConfigSchema**: { command: string, defaultArgs: string[] }\n\n2. **OrchestratorConfigSchema**: {\n   defaultAgent: string,\n   agents: z.record(string, AgentConfigSchema),\n   stateDir: string,\n   logDir: string,\n   workflowDir: string,\n   promptDir: string,\n   scriptDir: string,\n   pollInterval: number (default 10),\n   maxConcurrency: number (default 3),\n   ghCommand: string (default 'gh')\n   }\n\n3. **PlanTicketEntrySchema**: { ticketId: string, order: number, blockedBy: string[] (default []) }\n\n4. **PlanStatusSchema**: z.enum(['active', 'paused', 'complete'])\n\n5. **PlanFileSchema**: {\n   id: string,\n   name: string,\n   createdAt: string,\n   createdBy: string,\n   repo: string,\n   workflow: string,\n   agent: string | null (default null),\n   worktreeRoot: string,\n   status: PlanStatusSchema,\n   tickets: PlanTicketEntrySchema[]\n   }\n\n6. **TicketStatusSchema**: z.enum(['queued', 'ready', 'running', 'paused', 'complete', 'failed', 'needs_attention'])\n\n7. **PhaseHistoryEntrySchema**: { phase: string, status: 'success' | 'failure' | 'skipped', startedAt: string, completedAt: string | null, output: string (optional) }\n\n8. **TicketStateSchema**: {\n   planId: string,\n   ticketId: string,\n   title: string,\n   description: string,\n   acceptanceCriteria: string[] (default []),\n   linearUrl: string | null (default null),\n   repo: string,\n   workflow: string,\n   branch: string,\n   worktree: string,\n   agent: string | null (default null),\n   status: TicketStatusSchema,\n   currentPhase: string,\n   phaseHistory: PhaseHistoryEntrySchema[] (default []),\n   context: z.record(string, string) (default {}),\n   retries: z.record(string, number) (default {}),\n   error: string | null (default null)\n   }\n\n9. **PhaseTypeSchema**: z.enum(['script', 'agent', 'poll', 'terminal'])\n\n10. **PhaseDefinitionSchema**: {\n    id: string,\n    type: PhaseTypeSchema,\n    command: string (optional),\n    args: string[] (optional, default []),\n    promptTemplate: string (optional),\n    allowedTools: string[] (optional),\n    maxTurns: number (optional),\n    maxRetries: number (optional, default 0),\n    agent: string | null (optional),\n    intervalSeconds: number (optional),\n    timeoutSeconds: number (optional),\n    capture: z.record(string, string) (optional),\n    notify: boolean (optional, default false),\n    onSuccess: string (optional),\n    onFailure: string (optional)\n    }\n\n11. **WorkflowDefinitionSchema**: { name: string, description: string (optional, default ''), phases: PhaseDefinitionSchema[] }\n\n12. **WorkflowRegistryEntrySchema**: { name: string, file: string, description: string, tags: string[] (default []) }\n\nExport both the schemas (e.g., `PlanFileSchema`) and inferred types (e.g., `type PlanFile = z.infer<typeof PlanFileSchema>`). Export everything as named exports."
+    },
+    {
+      "id": "03-utils-shell",
+      "name": "Shell Execution Utility",
+      "description": "Subprocess execution wrapper for running bash scripts and CLI commands. Used by phase executor, capture logic, and agent invoker.",
+      "files": [
+        "src/utils/shell.ts"
+      ],
+      "dependsOn": ["01-project-scaffolding"],
+      "priority": 1,
+      "estimatedComplexity": "low",
+      "prompt": "Create `src/utils/shell.ts` — a utility for executing shell commands as child processes.\n\nExport the following:\n\n1. **ShellResult** interface: { stdout: string, stderr: string, exitCode: number }\n\n2. **execCommand(command: string, args: string[], options?: { cwd?: string, timeout?: number, env?: Record<string, string> }): Promise<ShellResult>**\n   - Uses child_process.spawn (import from 'node:child_process')\n   - Captures stdout and stderr as strings\n   - Resolves with ShellResult (does NOT reject on non-zero exit — caller decides)\n   - Supports optional timeout (kills process with SIGTERM after timeout ms)\n   - Merges provided env with process.env\n   - Streams output to buffers, trims final whitespace\n\n3. **execCommandStreaming(command: string, args: string[], options?: { cwd?: string, timeout?: number, env?: Record<string, string>, onStdout?: (chunk: string) => void, onStderr?: (chunk: string) => void }): Promise<ShellResult>**\n   - Same as execCommand but also calls onStdout/onStderr callbacks for real-time output\n   - Still accumulates full stdout/stderr in the result\n\nUse 'node:child_process' for spawn. Keep it simple — no retries, no parsing, just clean subprocess execution."
+    },
+    {
+      "id": "04-utils-logger",
+      "name": "Logger Utility",
+      "description": "Per-ticket file logging plus console output with color. Each ticket gets its own log file, and the console shows a summary with phase transitions.",
+      "files": [
+        "src/utils/logger.ts"
+      ],
+      "dependsOn": ["01-project-scaffolding"],
+      "priority": 1,
+      "estimatedComplexity": "low",
+      "prompt": "Create `src/utils/logger.ts` — a logging utility that writes to both per-ticket log files and the console.\n\nExport the following:\n\n1. **createLogger(logDir: string)** — factory function that returns a Logger instance. Creates logDir if it doesn't exist.\n\n2. **Logger** class/object with methods:\n   - **info(message: string, ticketId?: string): void** — Logs to console (chalk.blue prefix) and to ticket log file if ticketId provided\n   - **warn(message: string, ticketId?: string): void** — chalk.yellow prefix\n   - **error(message: string, ticketId?: string): void** — chalk.red prefix\n   - **success(message: string, ticketId?: string): void** — chalk.green prefix\n   - **phaseStart(ticketId: string, phaseId: string): void** — Logs phase start with timestamp\n   - **phaseEnd(ticketId: string, phaseId: string, status: 'success' | 'failure', durationMs: number): void** — Logs phase completion with duration\n   - **agentOutput(ticketId: string, output: string): void** — Writes agent stdout to the ticket's log file (not console)\n\nLog file format: `{logDir}/{ticketId}.log`\nEach line: `[ISO timestamp] [LEVEL] message`\n\nUse chalk for console colors. Use fs/promises appendFile for log writes. Create a simple formatter — no heavy logging frameworks.\n\nConsole format: `[HH:MM:SS] [LEVEL] [ticketId?] message` with colored level tags."
+    },
+    {
+      "id": "05-core-config",
+      "name": "Config Loader",
+      "description": "Loads orchestrator.yaml, validates with Zod, resolves relative paths to absolute. Single source of runtime configuration.",
+      "files": [
+        "src/core/config.ts"
+      ],
+      "dependsOn": ["02-core-types"],
+      "priority": 1,
+      "estimatedComplexity": "low",
+      "prompt": "Create `src/core/config.ts` — loads and validates the orchestrator configuration.\n\nImports: OrchestratorConfigSchema and OrchestratorConfig from './types.ts'. Uses 'yaml' package to parse YAML.\n\nExport the following:\n\n1. **loadConfig(configPath?: string): Promise<OrchestratorConfig>**\n   - Default configPath: 'orchestrator.yaml' in current working directory\n   - Reads the YAML file, parses it, validates with OrchestratorConfigSchema\n   - Resolves all relative directory paths (stateDir, logDir, workflowDir, promptDir, scriptDir) to absolute paths based on the directory containing the config file\n   - Throws a clear error if file not found or validation fails\n   - Returns the validated config\n\n2. **resolveAgent(config: OrchestratorConfig, phaseAgent: string | null | undefined, ticketAgent: string | null | undefined, planAgent: string | null | undefined): { command: string, defaultArgs: string[] }**\n   - Implements the four-level agent priority chain: phase → ticket → plan → global default\n   - Takes the first non-null value in that chain, falls back to config.defaultAgent\n   - Looks up the resolved agent name in config.agents\n   - Throws if the resolved agent name is not found in config.agents\n   - Returns the AgentConfig (command + defaultArgs)\n\nKeep it simple. No caching, no file watching. Just load, validate, resolve."
+    },
+    {
+      "id": "06-core-template",
+      "name": "Template Renderer",
+      "description": "Nunjucks-based template engine that renders prompt templates with ticket state variables and accumulated context.",
+      "files": [
+        "src/core/template.ts"
+      ],
+      "dependsOn": ["02-core-types"],
+      "priority": 1,
+      "estimatedComplexity": "low",
+      "prompt": "Create `src/core/template.ts` — renders Nunjucks templates with variables from ticket state and context.\n\nImports: TicketState from './types.ts'. Uses 'nunjucks' package.\n\nExport the following:\n\n1. **createTemplateRenderer(promptDir: string)** — factory that returns a TemplateRenderer. Configures a Nunjucks environment with:\n   - FileSystemLoader pointing at promptDir\n   - autoescape: false (these are markdown templates, not HTML)\n   - throwOnUndefined: false (missing variables render as empty string)\n\n2. **TemplateRenderer** object with methods:\n   - **render(templateFile: string, ticket: TicketState): string** — Renders the named template file with variables populated from the ticket. The template variable namespace should be flat and include:\n     - All ticket fields directly: ticket_id, title, description, acceptance_criteria (joined with newlines), repo, branch, worktree, linear_url, plan_id\n     - All keys from ticket.context spread in (so {{pr_url}}, {{git_diff_stat}}, etc. work)\n     - A special `acceptance_criteria_list` variable that formats criteria as a markdown bullet list\n   - **renderString(template: string, ticket: TicketState): string** — Same but renders an inline template string instead of a file. Useful for interpolating {{var}} in script args.\n\nNote: Template files use {{variable}} Nunjucks syntax. The templates are markdown files in the prompts/ directory.\n\nKeep it simple — just variable substitution, no custom filters or tags needed."
+    },
+    {
+      "id": "07-core-state",
+      "name": "State Manager",
+      "description": "Reads and writes plan and ticket state files from the state/ directory. Handles multi-plan scanning, dependency resolution, and status transitions.",
+      "files": [
+        "src/core/state.ts"
+      ],
+      "dependsOn": ["02-core-types"],
+      "priority": 1,
+      "estimatedComplexity": "medium",
+      "prompt": "Create `src/core/state.ts` — manages plan and ticket state files on disk.\n\nImports: PlanFile, PlanFileSchema, TicketState, TicketStateSchema from './types.ts'. Uses fs/promises and path.\n\nExport the following:\n\n1. **createStateManager(stateDir: string)** — factory that returns a StateManager. Creates stateDir if it doesn't exist.\n\n2. **StateManager** object with methods:\n\n   **Plan operations:**\n   - **listPlans(): Promise<PlanFile[]>** — Scans stateDir for subdirectories, reads _plan.json from each, validates with Zod, returns all valid plans. Skips directories without _plan.json.\n   - **getPlan(planId: string): Promise<PlanFile>** — Reads and validates state/{planId}/_plan.json. Throws if not found.\n   - **savePlan(plan: PlanFile): Promise<void>** — Writes _plan.json to state/{plan.id}/. Creates directory if needed.\n\n   **Ticket operations:**\n   - **listTickets(planId: string): Promise<TicketState[]>** — Reads all .json files in state/{planId}/ except _plan.json. Validates each with Zod.\n   - **getTicket(planId: string, ticketId: string): Promise<TicketState>** — Reads state/{planId}/{ticketId}.json. Throws if not found.\n   - **saveTicket(ticket: TicketState): Promise<void>** — Writes to state/{ticket.planId}/{ticket.ticketId}.json. Validates before writing.\n   - **updateTicket(planId: string, ticketId: string, updates: Partial<TicketState>): Promise<TicketState>** — Reads, merges updates, validates, saves, returns updated ticket.\n\n   **Scheduling:**\n   - **getReadyTickets(): Promise<TicketState[]>** — Scans ALL plans with status 'active'. For each plan, checks tickets with status 'queued' whose blockedBy dependencies have ALL reached 'complete' status. Returns those tickets (they should be transitioned to 'ready'). Also returns tickets already in 'ready' status.\n   - **getRunningCount(): Promise<number>** — Counts tickets with status 'running' across all active plans.\n\n   **Dependency resolution:**\n   - **resolveDependencies(planId: string): Promise<string[]>** — For a given plan, finds all 'queued' tickets whose blockedBy are all 'complete', transitions them to 'ready', returns the ticketIds that were unblocked.\n\nAll file reads should handle race conditions gracefully (file might be written by planner while runner reads). Use try/catch on individual file reads and skip corrupted files with a warning.\n\nJSON files are pretty-printed with 2-space indent when written."
+    },
+    {
+      "id": "08-core-workflow",
+      "name": "Workflow Loader",
+      "description": "Parses YAML workflow definition files, validates them, and provides lookup by name via the workflow registry.",
+      "files": [
+        "src/core/workflow.ts"
+      ],
+      "dependsOn": ["02-core-types"],
+      "priority": 1,
+      "estimatedComplexity": "low",
+      "prompt": "Create `src/core/workflow.ts` — loads and caches YAML workflow definitions.\n\nImports: WorkflowDefinition, WorkflowDefinitionSchema, WorkflowRegistryEntry, WorkflowRegistryEntrySchema from './types.ts'. Uses 'yaml' package.\n\nExport the following:\n\n1. **createWorkflowLoader(workflowDir: string)** — factory that returns a WorkflowLoader.\n\n2. **WorkflowLoader** object with methods:\n\n   - **loadRegistry(): Promise<WorkflowRegistryEntry[]>** — Reads workflows/registry.yaml, parses it as an array of WorkflowRegistryEntry, validates with Zod. Throws if registry not found.\n\n   - **loadWorkflow(name: string): Promise<WorkflowDefinition>** — Looks up the workflow name in the registry to find its file, reads and parses the YAML file from workflowDir, validates with Zod. Caches loaded workflows in memory (Map<string, WorkflowDefinition>). Throws if workflow not found in registry or file doesn't exist.\n\n   - **getPhase(workflowName: string, phaseId: string): Promise<PhaseDefinition>** — Loads the workflow (from cache if available) and returns the specific phase. Throws if phase not found.\n\n   - **getNextPhase(workflowName: string, currentPhaseId: string, outcome: 'success' | 'failure'): Promise<string | null>** — Returns the next phase ID based on the current phase's onSuccess/onFailure. Returns null if no transition defined (terminal).\n\n   - **clearCache(): void** — Clears the in-memory workflow cache (useful if files change).\n\nThe workflow YAML structure:\n```yaml\nname: standard\ndescription: Full implementation workflow\nphases:\n  - id: setup\n    type: script\n    command: setup-worktree.sh\n    ...\n```\n\nKeep it simple — just load, validate, cache, lookup."
+    },
+    {
+      "id": "09-agents-invoke",
+      "name": "Agent Invoker",
+      "description": "Abstraction layer for invoking headless coding agents (Claude Code, Codex). Translates a common interface into provider-specific CLI calls.",
+      "files": [
+        "src/agents/invoke.ts"
+      ],
+      "dependsOn": ["02-core-types", "03-utils-shell"],
+      "priority": 2,
+      "estimatedComplexity": "medium",
+      "prompt": "Create `src/agents/invoke.ts` — invokes headless coding agents as subprocesses.\n\nImports: ShellResult, execCommandStreaming from '../utils/shell.ts'. Import types as needed.\n\nExport the following:\n\n1. **AgentInvocation** interface:\n   ```typescript\n   {\n     prompt: string;           // The rendered prompt to send to the agent\n     cwd: string;              // Working directory (ticket worktree)\n     allowedTools?: string[];  // Tool restrictions for the agent\n     maxTurns?: number;        // Max agent turns\n   }\n   ```\n\n2. **AgentResult** interface:\n   ```typescript\n   {\n     stdout: string;\n     stderr: string;\n     exitCode: number;\n     success: boolean;  // exitCode === 0\n   }\n   ```\n\n3. **invokeAgent(agentConfig: { command: string, defaultArgs: string[] }, invocation: AgentInvocation, callbacks?: { onOutput?: (chunk: string) => void }): Promise<AgentResult>**\n\n   This function builds CLI args based on the agent command:\n\n   **For 'claude' command:**\n   - Base: `claude -p \"<prompt>\" --output-format text`\n   - Add defaultArgs from config\n   - Add `--allowedTools` with comma-separated tool list if provided\n   - Add `--max-turns <n>` if maxTurns provided\n   - cwd is set via the spawn options\n\n   **For 'codex' command:**\n   - Base: `codex exec \"<prompt>\"`\n   - Add defaultArgs from config\n   - cwd is set via the spawn options\n\n   **For any other command** (future agents):\n   - Base: `<command> \"<prompt>\"`\n   - Add defaultArgs from config\n   - cwd via spawn options\n\n   Uses execCommandStreaming to run the subprocess. Passes onOutput callback for real-time logging. Returns AgentResult with success derived from exitCode.\n\n   Important: The prompt should be passed as a single argument (the full rendered prompt string). For Claude, use the -p flag. Handle shell escaping properly — pass args as an array to spawn, NOT as a shell string.\n\n   Set a generous timeout (30 minutes default) since agent phases can take a while."
+    },
+    {
+      "id": "10-phases-executor",
+      "name": "Phase Executor",
+      "description": "Executes individual workflow phases by type (script, agent, poll, terminal). Handles capture logic, retries, and result reporting.",
+      "files": [
+        "src/phases/executor.ts"
+      ],
+      "dependsOn": ["02-core-types", "03-utils-shell", "05-core-config", "06-core-template", "09-agents-invoke"],
+      "priority": 3,
+      "estimatedComplexity": "high",
+      "prompt": "Create `src/phases/executor.ts` — executes individual workflow phases based on their type.\n\nImports from other modules:\n- Types: PhaseDefinition, TicketState, OrchestratorConfig from '../core/types.ts'\n- Shell: execCommand from '../utils/shell.ts'\n- Config: resolveAgent from '../core/config.ts'\n- Template: TemplateRenderer (the return type of createTemplateRenderer) from '../core/template.ts'\n- Agent: invokeAgent, AgentResult from '../agents/invoke.ts'\n- Logger: Logger type from '../utils/logger.ts'\n\nExport the following:\n\n1. **PhaseResult** interface:\n   ```typescript\n   {\n     success: boolean;\n     output: string;           // stdout or summary\n     captured: Record<string, string>;  // Values captured by capture rules\n     nextPhase: string | null; // Suggested next phase (from onSuccess/onFailure)\n   }\n   ```\n\n2. **createPhaseExecutor(config: OrchestratorConfig, templateRenderer: TemplateRenderer, logger: Logger)** — factory returning a PhaseExecutor.\n\n3. **PhaseExecutor** with method:\n   - **execute(phase: PhaseDefinition, ticket: TicketState, planAgent: string | null): Promise<PhaseResult>**\n\n   Dispatches to the appropriate handler based on phase.type:\n\n   **Script phase handler:**\n   - Resolves script path: `config.scriptDir + '/' + phase.command`\n   - Interpolates args by rendering each arg string through templateRenderer.renderString with the ticket\n   - Runs via execCommand with cwd set to the ticket's worktree\n   - Success = exitCode 0\n   - Runs capture rules after execution\n\n   **Agent phase handler:**\n   - Renders the prompt template via templateRenderer.render(phase.promptTemplate, ticket)\n   - Resolves the agent via resolveAgent(config, phase.agent, ticket.agent, planAgent)\n   - Invokes via invokeAgent with the resolved config\n   - Passes logger.agentOutput as the onOutput callback\n   - Success = agent exitCode 0\n   - Runs capture rules after execution\n\n   **Poll phase handler:**\n   - Runs the poll command at intervalSeconds intervals\n   - Continues until: command exits 0 (success), or timeoutSeconds exceeded (failure)\n   - Between polls, waits using a simple setTimeout/sleep\n   - Interpolates args same as script phase\n   - Runs capture rules on the final successful execution\n\n   **Terminal phase handler:**\n   - Always succeeds\n   - If phase.notify is true, returns a flag (the runner will set ticket status to 'needs_attention')\n   - nextPhase is always null\n\n   **Capture logic (shared across non-terminal phases):**\n   - For each key in phase.capture:\n     - If value is 'stdout': capture the phase's stdout output\n     - Otherwise: treat value as a shell command template, render it with the ticket context, execute it, capture its stdout\n   - Returns all captured values in the result\n\n   **Next phase resolution:**\n   - If success: nextPhase = phase.onSuccess ?? null\n   - If failure and phase.onFailure === 'retry': nextPhase = phase.id (re-run same phase)\n   - If failure and phase.onFailure === 'abort': nextPhase = 'abort' (special value)\n   - Otherwise: nextPhase = phase.onFailure ?? null"
+    },
+    {
+      "id": "11-core-runner",
+      "name": "Runner / State Machine",
+      "description": "The main state machine engine. Implements the daemon loop that scans plans, picks up ready tickets, executes phases, and manages transitions.",
+      "files": [
+        "src/core/runner.ts"
+      ],
+      "dependsOn": ["02-core-types", "04-utils-logger", "05-core-config", "06-core-template", "07-core-state", "08-core-workflow", "10-phases-executor"],
+      "priority": 4,
+      "estimatedComplexity": "high",
+      "prompt": "Create `src/core/runner.ts` — the core state machine that drives ticket execution.\n\nImports from other modules:\n- Types: OrchestratorConfig, TicketState, PlanFile from './types.ts'\n- Config: loadConfig, resolveAgent from './config.ts'\n- State: createStateManager, StateManager from './state.ts'\n- Workflow: createWorkflowLoader, WorkflowLoader from './workflow.ts'\n- Template: createTemplateRenderer, TemplateRenderer from './template.ts'\n- Phases: createPhaseExecutor, PhaseExecutor, PhaseResult from '../phases/executor.ts'\n- Logger: createLogger, Logger from '../utils/logger.ts'\n\nExport the following:\n\n1. **createRunner(config: OrchestratorConfig)** — factory that initializes all subsystems and returns a Runner.\n\n2. **Runner** object with methods:\n\n   **tick(): Promise<void>**\n   The core single-tick logic:\n   a. Resolve dependencies across all active plans (transition queued → ready where blockers complete)\n   b. Get count of currently running tickets\n   c. Get all ready tickets across active plans\n   d. For each ready ticket (up to maxConcurrency - runningCount):\n      - Set ticket status to 'running'\n      - Start executing the ticket's current phase (don't await — run concurrently)\n   e. The tick itself returns after dispatching. Phase execution is fire-and-forget within the tick.\n\n   **executeTicketPhase(ticket: TicketState): Promise<void>**\n   Executes the current phase of a ticket:\n   a. Load the plan to get planAgent\n   b. Load the workflow and get the current phase definition\n   c. Log phase start\n   d. Check retries: if this phase has exceeded maxRetries, transition to onFailure or 'failed'\n   e. Execute the phase via PhaseExecutor\n   f. Log phase end (with duration)\n   g. Record phase in phaseHistory\n   h. Merge captured values into ticket.context\n   i. Determine next phase:\n      - If result.nextPhase === 'retry': increment retries[phaseId], keep currentPhase the same, set status back to 'ready'\n      - If result.nextPhase === 'abort' or null with failure: set status to 'failed'\n      - If result.nextPhase is a terminal phase with notify: set status to 'needs_attention'\n      - If result.nextPhase is a terminal phase without notify: set status to 'complete'\n      - Otherwise: update currentPhase to nextPhase, set status to 'ready' (so next tick picks it up)\n   j. Save the updated ticket state\n   k. Wrap everything in try/catch — on unexpected error, set ticket to 'failed' with error message\n\n   **runSingleTicket(planId: string, ticketId: string): Promise<void>**\n   Runs a single ticket to completion (blocking). Loops: execute phase, check if terminal, repeat. Used by `orchestrator run` command.\n\n   **startDaemon(options?: { signal?: AbortSignal }): Promise<void>**\n   Runs tick() in a loop with config.pollInterval seconds between ticks. Respects AbortSignal for graceful shutdown. Logs each tick start.\n\nKey design decisions:\n- Phase execution within a tick is concurrent (Promise.all for dispatched tickets)\n- But a single ticket's phases are sequential (one phase at a time)\n- The runner never makes judgment calls — it follows workflow transitions deterministically\n- On any unexpected error, the ticket goes to 'failed' status, never silently drops\n- Use a Set<string> to track in-flight ticket IDs to prevent double-dispatch"
+    },
+    {
+      "id": "12-cli",
+      "name": "CLI Entry Point",
+      "description": "Commander-based CLI with all orchestrator commands: init, daemon, run, tick, status, pause, resume, skip, retry, and plan-level commands.",
+      "files": [
+        "src/cli.ts"
+      ],
+      "dependsOn": ["02-core-types", "05-core-config", "07-core-state", "11-core-runner"],
+      "priority": 5,
+      "estimatedComplexity": "medium",
+      "prompt": "Create `src/cli.ts` — the Commander-based CLI entry point for the orchestrator.\n\nImports:\n- commander: Command from 'commander'\n- Config: loadConfig from './core/config.ts'\n- State: createStateManager from './core/state.ts'\n- Runner: createRunner from './core/runner.ts'\n- Logger: createLogger from './utils/logger.ts'\n- chalk for colored output\n- fs/promises and path as needed\n\nSet up the CLI program:\n```typescript\nconst program = new Command()\n  .name('orchestrator')\n  .description('Agent orchestrator — deterministic state machine for autonomous software development')\n  .version('0.1.0');\n```\n\nImplement these commands:\n\n**orchestrator init**\n- Scaffolds the directory structure: state/, logs/, workflows/, prompts/, scripts/, skills/\n- Copies default orchestrator.yaml if it doesn't exist\n- Prints a summary of created directories\n\n**orchestrator daemon [--concurrency <n>] [--agent <name>]**\n- Loads config, optionally overrides maxConcurrency and defaultAgent from CLI flags\n- Creates runner and calls startDaemon()\n- Sets up SIGINT/SIGTERM handlers for graceful shutdown via AbortController\n- Prints 'Daemon started, polling every Ns' message\n\n**orchestrator run <planId> <ticketId>**\n- Loads config, creates runner, calls runSingleTicket(planId, ticketId)\n- Blocks until the ticket reaches a terminal state\n- Prints final status\n\n**orchestrator tick**\n- Loads config, creates runner, calls tick() once, then exits\n\n**orchestrator status [--plan <planId>] [--json]**\n- Loads all plans and their tickets from state manager\n- Without --json: prints a formatted table showing plan name, ticket ID, status, current phase\n- With --json: outputs raw JSON\n- With --plan: filters to just that plan\n- Use chalk for colored status indicators (green=complete, yellow=running, red=failed, gray=queued)\n\n**orchestrator pause <planId> <ticketId>**\n- Sets ticket status to 'paused' via state manager\n\n**orchestrator resume <planId> <ticketId>**\n- Sets ticket status to 'ready' (so next tick picks it up)\n\n**orchestrator skip <planId> <ticketId> <phase>**\n- Sets ticket's currentPhase to the specified phase, status to 'ready'\n\n**orchestrator retry <planId> <ticketId>**\n- Resets the retry counter for the current phase, sets status to 'ready'\n\n**orchestrator pause-plan <planId>**\n- Sets plan status to 'paused'\n\n**orchestrator resume-plan <planId>**\n- Sets plan status to 'active'\n\nEnd with `program.parse()`. Add `#!/usr/bin/env node` at the top for the bin entry point.\n\nKeep each command handler concise — load config, create the relevant manager, do the operation, print result."
+    },
+    {
+      "id": "13-workflow-standard",
+      "name": "Standard Workflow YAML",
+      "description": "The default 'standard' workflow YAML defining the full pipeline: setup → implement → self_review → simplify → verify → create_pr → review cycle → merge → cleanup → complete.",
+      "files": [
+        "workflows/standard.yaml"
+      ],
+      "dependsOn": [],
+      "priority": 1,
+      "estimatedComplexity": "medium",
+      "prompt": "Create `workflows/standard.yaml` — the default feature implementation workflow.\n\nThis YAML defines a WorkflowDefinition with the following phase graph:\n\n```\nsetup → implement → self_review → simplify → verify → create_pr\n  → await_review ←→ handle_review → verify_post_review → push_fixes\n  → await_merge → cleanup → complete\n```\n\nDefine each phase:\n\n```yaml\nname: standard\ndescription: \"Full implementation workflow: setup → implement → self-review → simplify → verify → create PR → review cycle → merge → cleanup.\"\nphases:\n```\n\n1. **setup** (script): Creates git worktree\n   - command: setup-worktree.sh\n   - args: [\"{{repo}}\", \"{{branch}}\", \"{{worktree}}\"]\n   - onSuccess: implement\n   - onFailure: abort\n\n2. **implement** (agent): Implement the feature\n   - promptTemplate: implement.md\n   - allowedTools: [\"Read\", \"Write\", \"Edit\", \"Bash\", \"Grep\", \"Glob\"]\n   - maxTurns: 50\n   - maxRetries: 2\n   - capture: { git_diff_stat: \"git -C {{worktree}} diff main --stat\" }\n   - onSuccess: self_review\n   - onFailure: retry\n\n3. **self_review** (agent): Review own diff (read-only)\n   - promptTemplate: self-review.md\n   - allowedTools: [\"Read\", \"Bash\", \"Grep\", \"Glob\"]\n   - maxTurns: 10\n   - capture: { review_verdict: \"stdout\" }\n   - onSuccess: simplify\n   - onFailure: implement  (sends back to implement on FAIL verdict)\n\n4. **simplify** (agent): Clean up implementation\n   - promptTemplate: simplify.md\n   - allowedTools: [\"Read\", \"Write\", \"Edit\", \"Bash\", \"Grep\", \"Glob\"]\n   - maxTurns: 20\n   - onSuccess: verify\n   - onFailure: verify  (proceed to verify even if simplify has issues)\n\n5. **verify** (agent): Run tests and linting\n   - promptTemplate: verify.md\n   - allowedTools: [\"Read\", \"Write\", \"Edit\", \"Bash\", \"Grep\", \"Glob\"]\n   - maxTurns: 30\n   - maxRetries: 2\n   - capture: { test_output: \"stdout\" }\n   - onSuccess: create_pr\n   - onFailure: retry\n\n6. **create_pr** (agent): Push and open PR\n   - promptTemplate: create-pr.md\n   - allowedTools: [\"Bash\"]\n   - maxTurns: 10\n   - capture:\n     pr_url: \"gh -C {{worktree}} pr view --json url -q .url\"\n     pr_number: \"gh -C {{worktree}} pr view --json number -q .number\"\n   - onSuccess: await_review\n   - onFailure: escalate\n\n7. **await_review** (poll): Wait for PR review\n   - command: check-pr-review.sh\n   - args: [\"{{repo}}\", \"{{pr_number}}\"]\n   - intervalSeconds: 120\n   - timeoutSeconds: 86400\n   - onSuccess: handle_review\n   - onFailure: escalate\n\n8. **handle_review** (agent): Address review comments\n   - promptTemplate: handle-review.md\n   - allowedTools: [\"Read\", \"Write\", \"Edit\", \"Bash\", \"Grep\", \"Glob\"]\n   - maxTurns: 30\n   - onSuccess: verify_post_review\n   - onFailure: escalate\n\n9. **verify_post_review** (agent): Re-run verification after fixes\n   - promptTemplate: verify.md\n   - allowedTools: [\"Read\", \"Write\", \"Edit\", \"Bash\", \"Grep\", \"Glob\"]\n   - maxTurns: 30\n   - maxRetries: 1\n   - onSuccess: push_fixes\n   - onFailure: retry\n\n10. **push_fixes** (agent): Push fix commits, back to review\n    - promptTemplate: push-fixes.md\n    - allowedTools: [\"Bash\"]\n    - maxTurns: 5\n    - onSuccess: await_review  (creates the review cycle loop)\n    - onFailure: escalate\n\n11. **await_merge** (poll): Wait for PR merge\n    - command: check-pr-merged.sh\n    - args: [\"{{repo}}\", \"{{pr_number}}\"]\n    - intervalSeconds: 120\n    - timeoutSeconds: 86400\n    - onSuccess: cleanup\n    - onFailure: escalate\n\n12. **cleanup** (script): Remove worktree\n    - command: cleanup-worktree.sh\n    - args: [\"{{worktree}}\"]\n    - onSuccess: complete\n    - onFailure: complete  (cleanup failure shouldn't block completion)\n\n13. **complete** (terminal): Done\n    - notify: false\n\n14. **escalate** (terminal): Needs human attention\n    - notify: true\n\n15. **abort** (terminal): Setup failed\n    - notify: true\n\nNote on the review cycle: await_review succeeds when there are review comments to address (→ handle_review). When the PR is approved with no unresolved threads, check-pr-review.sh should exit with code 2 or similar to indicate 'approved' — the workflow needs to handle this by routing approved PRs to await_merge. One approach: have check-pr-review.sh exit 0 for 'has comments', exit 1 for 'timeout/error', and capture a 'review_status' value. The runner can check this. Alternatively, simplify: when check-pr-review.sh detects approval, have it exit 0 and set a capture value, then handle_review checks if there are actually comments to address. Keep it pragmatic."
+    },
+    {
+      "id": "14-workflow-bugfix",
+      "name": "Bugfix Workflow YAML",
+      "description": "Abbreviated workflow for bug fixes that skips self-review and simplify phases.",
+      "files": [
+        "workflows/bugfix.yaml"
+      ],
+      "dependsOn": [],
+      "priority": 1,
+      "estimatedComplexity": "low",
+      "prompt": "Create `workflows/bugfix.yaml` — an abbreviated workflow for bug fixes.\n\nThis skips self_review and simplify since bug fixes should be minimal and targeted.\n\nPhase graph:\n```\nsetup → implement → verify → create_pr → await_review ←→ handle_review → verify_post_review → push_fixes → await_merge → cleanup → complete\n```\n\n```yaml\nname: bugfix\ndescription: \"Abbreviated workflow for bug fixes. Skips self-review and simplify for minimal, targeted changes.\"\nphases:\n```\n\n1. **setup** (script): Same as standard\n   - command: setup-worktree.sh\n   - args: [\"{{repo}}\", \"{{branch}}\", \"{{worktree}}\"]\n   - onSuccess: implement\n   - onFailure: abort\n\n2. **implement** (agent): Bug fix implementation\n   - promptTemplate: implement-bugfix.md  (uses bugfix-specific prompt)\n   - allowedTools: [\"Read\", \"Write\", \"Edit\", \"Bash\", \"Grep\", \"Glob\"]\n   - maxTurns: 30  (lower than standard — bug fixes should be smaller)\n   - maxRetries: 2\n   - capture: { git_diff_stat: \"git -C {{worktree}} diff main --stat\" }\n   - onSuccess: verify  (skips directly to verify)\n   - onFailure: retry\n\n3. **verify** through **complete/escalate/abort**: Same as standard workflow\n\nInclude the same terminal phases: complete, escalate, abort."
+    },
+    {
+      "id": "15-workflow-registry",
+      "name": "Workflow Registry & Docs",
+      "description": "The workflow registry YAML that lists available workflows, plus a README documenting the phase type reference for workflow authors.",
+      "files": [
+        "workflows/registry.yaml",
+        "workflows/README.md"
+      ],
+      "dependsOn": [],
+      "priority": 1,
+      "estimatedComplexity": "low",
+      "prompt": "Create two files:\n\n**1. workflows/registry.yaml**\n\nA YAML array listing all available workflows:\n\n```yaml\n- name: standard\n  file: standard.yaml\n  description: >\n    Full implementation workflow: setup → implement → self-review → simplify →\n    verify → create PR → review cycle → merge → cleanup.\n  tags: [feature, default]\n\n- name: bugfix\n  file: bugfix.yaml\n  description: >\n    Abbreviated workflow for bug fixes. Skips self-review and simplify.\n    Uses focused prompts emphasizing minimal changes and root cause identification.\n  tags: [bug, hotfix]\n```\n\n**2. workflows/README.md**\n\nA reference document for workflow authors. Cover:\n\n- **Overview**: What workflows are, how the state machine uses them\n- **Phase types reference**: For each type (script, agent, poll, terminal), document all fields, required vs optional, and give an example\n- **Template variables**: List all available {{variables}} from ticket state and context, explain how captures add new variables\n- **Capture rules**: How to define captures, the special 'stdout' value, how captured values flow to later phases\n- **Transitions**: How onSuccess/onFailure work, the special 'retry' and 'abort' values\n- **Registry**: How to add a new workflow (create YAML + add registry entry)\n- **Tips**: Common patterns like review cycles (back-edges in the graph), read-only agent phases, retry limits\n\nKeep it practical and example-heavy. This is what the LLM planner reads to understand how to create custom workflows."
+    },
+    {
+      "id": "16-prompt-templates",
+      "name": "Prompt Templates",
+      "description": "All Nunjucks markdown prompt templates used by agent phases. These are the prompts sent to headless coding agents.",
+      "files": [
+        "prompts/implement.md",
+        "prompts/implement-bugfix.md",
+        "prompts/self-review.md",
+        "prompts/simplify.md",
+        "prompts/verify.md",
+        "prompts/create-pr.md",
+        "prompts/handle-review.md",
+        "prompts/push-fixes.md"
+      ],
+      "dependsOn": [],
+      "priority": 1,
+      "estimatedComplexity": "medium",
+      "prompt": "Create all prompt template files in the `prompts/` directory. These are Nunjucks markdown templates that get rendered with ticket variables and sent to headless coding agents.\n\nAvailable template variables (from ticket state):\n- {{ticket_id}}, {{title}}, {{description}}, {{acceptance_criteria_list}}\n- {{repo}}, {{branch}}, {{worktree}}, {{linear_url}}, {{plan_id}}\n- Any captured context values from previous phases: {{git_diff_stat}}, {{pr_url}}, {{pr_number}}, {{test_output}}, {{review_verdict}}\n\nIMPORTANT: These prompts are sent to headless coding agents (Claude Code, Codex) that have access to the TARGET PROJECT's CLAUDE.md/AGENTS.md. The prompts should NOT include project-specific build/test commands — the agent discovers those from the project's own docs.\n\n---\n\n**prompts/implement.md**\nYou are implementing a feature for ticket {{ticket_id}}.\n\nTitle: {{title}}\n\nDescription:\n{{description}}\n\nAcceptance Criteria:\n{{acceptance_criteria_list}}\n\nInstructions:\n1. Read the project's CLAUDE.md or AGENTS.md to understand conventions, build commands, and test commands\n2. Explore the codebase to understand the relevant architecture\n3. Implement the feature according to the description and acceptance criteria\n4. Write tests that cover the acceptance criteria\n5. Run the project's test suite and fix any failures\n6. Run the project's linter and fix any issues\n7. Commit your changes with a clear commit message referencing {{ticket_id}}\n\nDo not create unnecessary abstractions. Keep changes focused and minimal.\n\n---\n\n**prompts/implement-bugfix.md**\nYou are fixing a bug for ticket {{ticket_id}}.\n\nTitle: {{title}}\n\nDescription:\n{{description}}\n\nInstructions:\n1. Read the project's CLAUDE.md or AGENTS.md to understand conventions\n2. Identify the root cause of the bug — do not just treat symptoms\n3. Make the minimal change needed to fix the bug\n4. Write a test that reproduces the bug and verifies the fix\n5. Run the project's test suite and fix any failures\n6. Run the project's linter\n7. Commit with a clear message referencing {{ticket_id}}\n\nKeep changes minimal and targeted. Do not refactor surrounding code.\n\n---\n\n**prompts/self-review.md**\nYou are reviewing the diff for ticket {{ticket_id}}: {{title}}\n\nRun `git diff main` to see all changes.\n\nReview the diff against this checklist:\n- [ ] Correctness: Does the code do what the ticket asks?\n- [ ] Error handling: Are edge cases and errors handled?\n- [ ] Security: Any injection, auth, or data exposure issues?\n- [ ] Test coverage: Are the acceptance criteria tested?\n- [ ] Naming: Are names clear and consistent with the codebase?\n- [ ] Complexity: Is there unnecessary complexity that could be simplified?\n- [ ] Dead code: Is there commented-out code or unused imports?\n\nIf ALL checks pass, output exactly: VERDICT: PASS\nIf ANY check fails, output: VERDICT: FAIL followed by a brief explanation of what needs fixing.\n\nDo NOT modify any files. This is a read-only review.\n\n---\n\n**prompts/simplify.md**\nYou are simplifying the implementation for ticket {{ticket_id}}: {{title}}\n\nReview the diff with `git diff main` and clean up:\n- Remove dead code, commented-out code, unused imports\n- Collapse unnecessary abstractions (inline single-use helpers)\n- Simplify conditionals and control flow\n- Remove over-engineering (feature flags, unnecessary configurability)\n\nDo NOT change functionality. Do NOT add features. Just clean up.\nRun tests after simplifying to ensure nothing broke.\nCommit any changes.\n\n---\n\n**prompts/verify.md**\nYou are verifying the implementation for ticket {{ticket_id}}: {{title}}\n\n1. Read the project's CLAUDE.md or AGENTS.md to find test and lint commands\n2. Run the full test suite\n3. Run the linter\n4. Run any other verification steps mentioned in the project docs\n5. If anything fails, fix it and re-run\n6. Commit any fixes\n\nAll tests and checks must pass before this phase can succeed.\n\n---\n\n**prompts/create-pr.md**\nCreate a pull request for ticket {{ticket_id}}: {{title}}\n\n1. Push the branch: `git push -u origin {{branch}}`\n2. Create a PR using `gh pr create` with:\n   - Title: \"{{ticket_id}}: {{title}}\"\n   - Body that includes:\n     - Summary of changes (from the diff)\n     - Acceptance criteria from the ticket\n     - Test coverage summary\n     {% if linear_url %}- Link to ticket: {{linear_url}}{% endif %}\n\nDo not merge the PR. Just create it.\n\n---\n\n**prompts/handle-review.md**\nAddress PR review comments for ticket {{ticket_id}}: {{title}}\n\nPR: {{pr_url}}\n\n1. Read all pending review comments: `gh pr view {{pr_number}} --comments`\n2. Also check inline review threads: `gh api repos/{owner}/{repo}/pulls/{{pr_number}}/comments`\n3. For each unresolved comment:\n   - Understand what the reviewer is asking\n   - Make the requested change (or explain why not in a reply)\n   - Resolve the thread if the fix is straightforward\n4. Commit all changes with a message like \"Address review feedback for {{ticket_id}}\"\n\n---\n\n**prompts/push-fixes.md**\nPush review fix commits for ticket {{ticket_id}}.\n\n1. Run `git status` to verify there are committed changes to push\n2. Push: `git push origin {{branch}}`\n3. Verify the push succeeded\n\nDo not force push. If push fails, investigate and fix.\n\n---\n\nFor all templates: use clean markdown formatting, keep instructions numbered and actionable, and reference {{variables}} where appropriate."
+    },
+    {
+      "id": "17-bash-scripts",
+      "name": "Infrastructure Bash Scripts",
+      "description": "Bash scripts for deterministic infrastructure operations: worktree setup/cleanup, PR review checking, PR merge checking.",
+      "files": [
+        "scripts/setup-worktree.sh",
+        "scripts/cleanup-worktree.sh",
+        "scripts/check-pr-review.sh",
+        "scripts/check-pr-merged.sh"
+      ],
+      "dependsOn": [],
+      "priority": 1,
+      "estimatedComplexity": "medium",
+      "prompt": "Create four bash scripts in the `scripts/` directory. All scripts should be executable (chmod +x), use `#!/usr/bin/env bash`, include `set -euo pipefail`, and output clear status messages.\n\n---\n\n**scripts/setup-worktree.sh**\nArgs: $1=repo_path, $2=branch_name, $3=worktree_path\n\nSteps:\n1. Validate all three args are provided\n2. cd into the repo path\n3. Fetch latest from origin: `git fetch origin`\n4. Create a new worktree: `git worktree add \"$3\" -b \"$2\" origin/main`\n   - If branch already exists, try `git worktree add \"$3\" \"$2\"` instead\n5. Verify the worktree was created\n6. Print success message with worktree path\n\nExit 0 on success, exit 1 on any failure.\n\n---\n\n**scripts/cleanup-worktree.sh**\nArgs: $1=worktree_path\n\nSteps:\n1. Validate arg\n2. Remove the worktree: `git worktree remove \"$1\" --force`\n3. Prune: `git worktree prune`\n4. Print success message\n\nExit 0 on success, exit 1 on failure. Don't fail if worktree doesn't exist (idempotent).\n\n---\n\n**scripts/check-pr-review.sh**\nArgs: $1=repo_path, $2=pr_number\n\nThis script checks the state of PR reviews. It needs to distinguish three states:\n- **Has unresolved review comments** → exit 0 (success — there's work to do)\n- **Approved with no unresolved threads** → exit 0 but write 'approved' to stdout\n- **Still waiting (no reviews yet)** → exit 1 (keep polling)\n- **Error** → exit 2\n\nUse `gh` CLI:\n```bash\n# Get review decision\nreview_state=$(gh pr view \"$2\" --repo \"$1\" --json reviewDecision -q .reviewDecision)\n\n# Get pending review threads\ncomments=$(gh pr view \"$2\" --repo \"$1\" --json comments -q '.comments | length')\n```\n\nLogic:\n- If reviewDecision is 'APPROVED': echo 'approved' and exit 0\n- If reviewDecision is 'CHANGES_REQUESTED' or there are unresolved comments: echo 'changes_requested' and exit 0\n- Otherwise (REVIEW_REQUIRED, empty, etc.): exit 1 (keep polling)\n\n---\n\n**scripts/check-pr-merged.sh**\nArgs: $1=repo_path, $2=pr_number\n\nCheck if a PR has been merged.\n\nUse `gh`:\n```bash\nstate=$(gh pr view \"$2\" --repo \"$1\" --json state -q .state)\n```\n\n- If state is 'MERGED': echo 'merged' and exit 0\n- If state is 'CLOSED' (but not merged): echo 'closed' and exit 2 (error — PR was closed without merge)\n- Otherwise: exit 1 (keep polling)\n\n---\n\nAll scripts should include helpful error messages on invalid args. Use `echo` for status output (stdout is captured by the orchestrator)."
+    },
+    {
+      "id": "18-docs-claude-md",
+      "name": "CLAUDE.md & Project Documentation",
+      "description": "The orchestrator repo's own CLAUDE.md with progressive disclosure, orienting both coding agents and the LLM planner.",
+      "files": [
+        "CLAUDE.md"
+      ],
+      "dependsOn": [],
+      "priority": 2,
+      "estimatedComplexity": "medium",
+      "prompt": "Create `CLAUDE.md` for the agent-orchestrator repo. This serves two audiences:\n1. Coding agents working ON the orchestrator (adding features, fixing bugs)\n2. The LLM planner running INSIDE the orchestrator repo\n\nStructure with progressive disclosure:\n\n## Quick Reference (top-level, always visible)\n- What this project is (1 sentence)\n- Language: TypeScript, built with commander/zod/nunjucks/yaml\n- Build: `npm run build`, Dev: `npm run dev -- <command>`\n- Test: (no test framework yet — manual testing with state files)\n- Key commands: `orchestrator daemon`, `orchestrator run <plan> <ticket>`, `orchestrator status`\n\n## Architecture\n- Two-process design: LLM planner writes state files, state machine reads and executes\n- State files in `state/` are the only contract between planner and runner\n- Workflows are YAML-defined directed graphs of phases\n- Four phase types: script, agent, poll, terminal\n- Agent-agnostic: Claude Code or Codex, configurable at 4 priority levels\n\n## Project Structure\n- src/core/ — Config, state, workflow, template, runner, types\n- src/agents/ — Agent invocation abstraction\n- src/phases/ — Phase type executors\n- src/utils/ — Shell execution, logging\n- workflows/ — YAML workflow definitions\n- prompts/ — Nunjucks markdown templates for agent phases\n- scripts/ — Bash scripts for infrastructure phases\n- state/ — Runtime state files (gitignored)\n- logs/ — Per-ticket logs (gitignored)\n\n## Conventions\n- Zod schemas in types.ts are the single source of truth for all data shapes\n- Named exports everywhere, no default exports\n- async/await, fs/promises, no callbacks\n- Runner is deterministic — NEVER makes judgment calls, follows YAML transitions\n- Template variables use {{variable}} syntax\n- State files are pretty-printed JSON with 2-space indent\n\n## For the LLM Planner\n- See skills/planner/SKILL.md for how to create plans and ticket state files\n- See workflows/README.md for the workflow authoring reference\n- See skills/providers/ for tool-specific ticket fetching (Linear, GitHub Issues)\n\n## Adding a New Workflow\n1. Create a YAML file in workflows/\n2. Add an entry to workflows/registry.yaml\n3. See workflows/README.md for phase type reference\n\n## Adding a New Agent Provider\n1. Add the agent config to orchestrator.yaml under `agents:`\n2. Add CLI translation logic in src/agents/invoke.ts\n\nKeep it concise but complete. The CLAUDE.md should make it possible for a fresh agent to understand the project and start contributing immediately."
+    },
+    {
+      "id": "19-docs-skills",
+      "name": "Agent Skills Documentation",
+      "description": "SKILL.md files for the planner, workflow authoring, and project management tool providers.",
+      "files": [
+        "skills/planner/SKILL.md",
+        "skills/workflows/SKILL.md",
+        "skills/providers/linear/SKILL.md",
+        "skills/providers/github-issues/SKILL.md"
+      ],
+      "dependsOn": [],
+      "priority": 2,
+      "estimatedComplexity": "medium",
+      "prompt": "Create all SKILL.md files in the skills/ directory. These are progressive-disclosure documents that teach the LLM planner how to use the orchestrator.\n\n---\n\n**skills/planner/SKILL.md**\n\nThis is the core skill. Teach the LLM planner how to:\n\n1. **Create a plan directory**: `state/{plan-id}/` with a `_plan.json` file\n2. **Write _plan.json**: Full schema with all fields explained, examples\n   - id: slug matching directory name\n   - name: human-readable\n   - repo: absolute path to target project\n   - workflow: name from registry (default: 'standard')\n   - agent: optional override (default: null, uses global)\n   - worktreeRoot: where worktrees will be created\n   - status: start as 'active'\n   - tickets: array with ticketId, order, blockedBy\n3. **Write ticket state files**: Full schema with all fields explained\n   - Everything above 'status' is written by planner\n   - Everything from 'status' down is managed by runner\n   - Initial status should be 'queued' (or 'ready' if no blockers)\n   - currentPhase should be the first phase of the workflow (e.g., 'setup')\n4. **Dependency management**: How blockedBy works, scoping within plans\n5. **Workflow selection**: How to read the registry and choose the right workflow\n6. **Agent selection**: When to override the agent at plan or ticket level\n7. **CLI commands**: How the human uses orchestrator CLI to manage execution\n\nInclude 2-3 complete examples: creating a plan from scratch, creating tickets with dependencies.\n\n---\n\n**skills/workflows/SKILL.md**\n\nTeach the LLM planner and developers how to create custom workflows:\n\n1. Phase type reference (script, agent, poll, terminal)\n2. All fields for each phase type\n3. Template variable system\n4. Capture rules\n5. Transition logic (onSuccess, onFailure, retry, abort)\n6. How to add to the registry\n7. Example: creating a 'review-only' workflow that just creates a PR for existing changes\n\n---\n\n**skills/providers/linear/SKILL.md**\n\nTeach the planner how to work with Linear:\n\n1. Fetching tickets via Linear MCP or API\n2. Mapping Linear fields to ticket state fields:\n   - Issue title → title\n   - Issue description → description\n   - Labels/acceptance criteria → acceptanceCriteria\n   - Issue URL → linearUrl\n   - Issue relations → blockedBy dependencies\n3. Naming conventions for branches: `{username}/{ticket-id}-{slug}`\n4. Example: fetching a Linear sprint and generating plan + ticket files\n\n---\n\n**skills/providers/github-issues/SKILL.md**\n\nTeach the planner how to work with GitHub Issues:\n\n1. Fetching issues via `gh issue list` and `gh issue view`\n2. Mapping GitHub fields to ticket state fields:\n   - Issue title → title\n   - Issue body → description (parse acceptance criteria from body template)\n   - Issue URL → linearUrl (reuse the field)\n   - Issue references (#123 mentions) → blockedBy dependencies\n3. Naming conventions\n4. Example: fetching issues by milestone and generating plan + ticket files\n\n---\n\nAll skills should use clear headers, include JSON/YAML examples, and be written for an LLM reader (clear, unambiguous, no assumed context)."
+    }
+  ],
+  "dependencyGraph": {
+    "description": "Visual overview of task dependencies. Tasks at the same tier can run in parallel.",
+    "tier0_foundation": {
+      "tasks": ["01-project-scaffolding"],
+      "note": "Must complete first — creates package.json and installs deps"
+    },
+    "tier1_types_and_content": {
+      "tasks": ["02-core-types", "13-workflow-standard", "14-workflow-bugfix", "15-workflow-registry", "16-prompt-templates", "17-bash-scripts", "18-docs-claude-md", "19-docs-skills"],
+      "note": "Types depend on scaffolding. All content tasks (13-19) have zero code deps and can start immediately."
+    },
+    "tier2_utilities_and_core": {
+      "tasks": ["03-utils-shell", "04-utils-logger", "05-core-config", "06-core-template", "07-core-state", "08-core-workflow"],
+      "note": "All depend on types. Shell and logger also depend on scaffolding. Can all run in parallel."
+    },
+    "tier3_agents": {
+      "tasks": ["09-agents-invoke"],
+      "note": "Depends on types + shell utility"
+    },
+    "tier4_execution": {
+      "tasks": ["10-phases-executor"],
+      "note": "Depends on types, shell, config, template, and agent invoker"
+    },
+    "tier5_orchestration": {
+      "tasks": ["11-core-runner"],
+      "note": "Depends on all core modules and phase executor"
+    },
+    "tier6_cli": {
+      "tasks": ["12-cli"],
+      "note": "Depends on runner, state, and config"
+    }
+  },
+  "parallelizationStrategy": {
+    "maxParallelAgents": "Up to 12 tasks can run in the first two tiers alone",
+    "criticalPath": "01 → 02 → (05,06,07,08,09 in parallel) → 10 → 11 → 12",
+    "quickWins": "Tasks 13-19 (content) can start immediately and have no code dependencies on each other",
+    "integrationNote": "After all tasks complete, a final integration pass should: 1) run npm run build to verify TypeScript compilation, 2) create a sample state/ plan and run `orchestrator tick` to smoke test, 3) fix any import/interface mismatches between modules"
+  }
+}
