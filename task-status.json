@@ -4,7 +4,7 @@
       "status": "done",
       "notes": "Scaffolded with pnpm, Node 24 (.nvmrc), project named another-orchestrator. Created package.json, tsconfig.json, .gitignore, orchestrator.yaml, and all directories with .gitkeep files."
     },
-    "02-core-types": { "status": "pending", "notes": "" },
+    "02-core-types": { "status": "done", "notes": "Created src/core/types.ts with 12 Zod schemas and inferred TypeScript types. All schemas include defaults per spec. Compiles cleanly." },
     "03-utils-shell": { "status": "pending", "notes": "" },
     "04-utils-logger": { "status": "pending", "notes": "" },
     "05-core-config": { "status": "pending", "notes": "" },
