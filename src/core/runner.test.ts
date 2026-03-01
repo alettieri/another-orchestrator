@@ -269,8 +269,8 @@ workflows:
     expect(result.error).toContain("maxRetries");
   });
 
-  it("handles phase execution errors gracefully", async () => {
-    // Use agent phase which throws "not yet implemented"
+  it("handles agent phase without promptTemplate gracefully", async () => {
+    // Agent phase missing promptTemplate should fail and follow onFailure
     const agentWorkflowYaml = `
 name: agent-workflow
 description: "Agent workflow"
@@ -305,7 +305,8 @@ workflows:
     const runner = createRunner(config);
     const result = await runner.runSingleTicket("test-plan", "TICKET-1");
 
-    expect(result.status).toBe("failed");
-    expect(result.error).toContain("not yet implemented");
+    // Missing promptTemplate causes failure, follows onFailure to abort terminal
+    expect(result.status).toBe("complete");
+    expect(result.currentPhase).toBe("abort");
   });
 });

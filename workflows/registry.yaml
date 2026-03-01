@@ -5,3 +5,10 @@ workflows:
     tags:
       - test
       - minimal
+
+  - name: standard
+    file: standard.yaml
+    description: "Standard workflow: setup, implement, verify, create PR, await merge, cleanup"
+    tags:
+      - standard
+      - agent

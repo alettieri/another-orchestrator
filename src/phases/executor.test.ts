@@ -242,23 +242,132 @@ describe("executor", () => {
     });
   });
 
-  describe("unsupported phases", () => {
-    it("throws for agent phase", async () => {
+  describe("agent phase", () => {
+    it("renders prompt, invokes agent, and returns success", async () => {
+      await writeFile(
+        join(promptDir, "test-prompt.md"),
+        "Implement {{ title }} for {{ repo }}",
+      );
+
+      config.agents.echo = { command: "echo", defaultArgs: [] };
+
+      const phase: PhaseDefinition = {
+        id: "agent_phase",
+        type: "agent",
+        promptTemplate: "test-prompt.md",
+        agent: "echo",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+        onSuccess: "verify",
+        onFailure: "escalate",
+      };
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger);
+      const result = await executor.execute(phase, makeTicket(), null);
+
+      expect(result.success).toBe(true);
+      expect(result.output.trim()).toBe("Implement Test Ticket for test-repo");
+      expect(result.nextPhase).toBe("verify");
+    });
+
+    it("resolves agent from ticket when phase agent is not set", async () => {
+      await writeFile(join(promptDir, "simple.md"), "hello");
+
+      config.agents.echo = { command: "echo", defaultArgs: [] };
+
+      const phase: PhaseDefinition = {
+        id: "agent_phase",
+        type: "agent",
+        promptTemplate: "simple.md",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+        onSuccess: "next",
+        onFailure: "fail",
+      };
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger);
+      const ticket = makeTicket({ agent: "echo" });
+      const result = await executor.execute(phase, ticket, null);
+
+      expect(result.success).toBe(true);
+    });
+
+    it("returns failure when promptTemplate is missing", async () => {
       const phase: PhaseDefinition = {
         id: "agent_phase",
         type: "agent",
         args: [],
         maxRetries: 0,
         notify: false,
+        onFailure: "escalate",
       };
 
       const renderer = createTemplateRenderer(promptDir);
       const executor = createPhaseExecutor(config, renderer, logger);
-      await expect(executor.execute(phase, makeTicket(), null)).rejects.toThrow(
-        "Agent phases are not yet implemented",
-      );
+      const result = await executor.execute(phase, makeTicket(), null);
+
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("missing promptTemplate");
+      expect(result.nextPhase).toBe("escalate");
     });
 
+    it("captures values from agent output", async () => {
+      await writeFile(join(promptDir, "cap.md"), "capture test");
+
+      config.agents.echo = { command: "echo", defaultArgs: [] };
+
+      const phase: PhaseDefinition = {
+        id: "agent_phase",
+        type: "agent",
+        promptTemplate: "cap.md",
+        agent: "echo",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+        capture: { agent_output: "stdout" },
+        onSuccess: "done",
+        onFailure: "fail",
+      };
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger);
+      const result = await executor.execute(phase, makeTicket(), null);
+
+      expect(result.success).toBe(true);
+      expect(result.captured.agent_output).toContain("capture test");
+    });
+
+    it("follows onFailure when agent fails", async () => {
+      await writeFile(join(promptDir, "fail.md"), "this will fail");
+
+      config.agents.failing = { command: "false", defaultArgs: [] };
+
+      const phase: PhaseDefinition = {
+        id: "agent_phase",
+        type: "agent",
+        promptTemplate: "fail.md",
+        agent: "failing",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+        onSuccess: "next",
+        onFailure: "escalate",
+      };
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger);
+      const result = await executor.execute(phase, makeTicket(), null);
+
+      expect(result.success).toBe(false);
+      expect(result.nextPhase).toBe("escalate");
+    });
+  });
+
+  describe("unsupported phases", () => {
     it("throws for poll phase", async () => {
       const phase: PhaseDefinition = {
         id: "poll_phase",

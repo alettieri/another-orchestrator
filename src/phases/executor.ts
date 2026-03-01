@@ -1,4 +1,6 @@
 import { join } from "node:path";
+import { invokeAgent } from "../agents/invoke.js";
+import { resolveAgent } from "../core/config.js";
 import type { TemplateRenderer } from "../core/template.js";
 import type {
   OrchestratorConfig,
@@ -105,7 +107,48 @@ export function createPhaseExecutor(
       }
 
       if (phase.type === "agent") {
-        throw new Error("Agent phases are not yet implemented");
+        if (!phase.promptTemplate) {
+          return {
+            success: false,
+            output: "Agent phase missing promptTemplate",
+            captured: {},
+            nextPhase: getNextPhase(phase, false),
+          };
+        }
+
+        const prompt = templateRenderer.render(phase.promptTemplate, ticket);
+        const agentName = resolveAgent(
+          config,
+          phase.agent,
+          ticket.agent,
+          _planAgent,
+        );
+        const agentConfig = config.agents[agentName];
+
+        logger.info(`Invoking agent "${agentName}"`, ticket.ticketId);
+
+        const agentResult = await invokeAgent(
+          agentConfig,
+          {
+            prompt,
+            cwd: ticket.worktree || undefined,
+            allowedTools: phase.allowedTools,
+            maxTurns: phase.maxTurns,
+          },
+          {
+            onOutput: (chunk) => logger.agentOutput(ticket.ticketId, chunk),
+          },
+        );
+
+        const captured = await captureValues(phase, agentResult.stdout, ticket);
+        const nextPhase = getNextPhase(phase, agentResult.success);
+
+        return {
+          success: agentResult.success,
+          output: agentResult.stdout,
+          captured,
+          nextPhase,
+        };
       }
 
       if (phase.type === "poll") {

@@ -1,0 +1,73 @@
+name: standard
+description: "Standard workflow: setup, implement, verify, create PR, await merge, cleanup"
+
+phases:
+  - id: setup
+    type: script
+    command: setup.sh
+    args:
+      - "{{ repo }}"
+      - "{{ branch }}"
+      - "{{ worktree }}"
+    capture:
+      worktree: stdout
+    onSuccess: implement
+    onFailure: abort
+
+  - id: implement
+    type: agent
+    promptTemplate: implement.md
+    maxRetries: 1
+    onSuccess: verify
+    onFailure: escalate
+
+  - id: verify
+    type: script
+    command: verify.sh
+    args:
+      - "{{ worktree }}"
+    maxRetries: 1
+    onSuccess: create_pr
+    onFailure: implement
+
+  - id: create_pr
+    type: script
+    command: create_pr.sh
+    args:
+      - "{{ repo }}"
+      - "{{ branch }}"
+      - "{{ title }}"
+      - "{{ ticketId }}"
+    capture:
+      pr_url: stdout
+    onSuccess: await_merge
+    onFailure: escalate
+
+  - id: await_merge
+    type: poll
+    command: check_pr_merged.sh
+    args:
+      - "{{ context.pr_url }}"
+    intervalSeconds: 60
+    timeoutSeconds: 86400
+    onSuccess: cleanup
+    onFailure: escalate
+
+  - id: cleanup
+    type: script
+    command: cleanup.sh
+    args:
+      - "{{ worktree }}"
+    onSuccess: complete
+    onFailure: complete
+
+  - id: complete
+    type: terminal
+
+  - id: escalate
+    type: terminal
+    notify: true
+
+  - id: abort
+    type: terminal
+    notify: true
