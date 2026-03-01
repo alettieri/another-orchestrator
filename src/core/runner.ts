@@ -8,6 +8,12 @@ import { createWorkflowLoader } from "./workflow.js";
 
 export interface Runner {
   runSingleTicket(planId: string, ticketId: string): Promise<TicketState>;
+  tick(): Promise<void>;
+  startDaemon(options?: { signal?: AbortSignal }): Promise<void>;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function createRunner(config: OrchestratorConfig): Runner {
@@ -16,6 +22,8 @@ export function createRunner(config: OrchestratorConfig): Runner {
   const templateRenderer = createTemplateRenderer(config.promptDir);
   const logger = createLogger(config.logDir);
   const phaseExecutor = createPhaseExecutor(config, templateRenderer, logger);
+
+  const inFlight = new Set<string>();
 
   async function executeTicketPhase(ticket: TicketState): Promise<TicketState> {
     const plan = await stateManager.getPlan(ticket.planId);
@@ -137,6 +145,41 @@ export function createRunner(config: OrchestratorConfig): Runner {
     });
   }
 
+  async function runTicketPhases(ticket: TicketState): Promise<TicketState> {
+    let current = ticket;
+
+    while (true) {
+      current = await executeTicketPhase(current);
+
+      // Re-read from disk for consistency
+      const updated = await stateManager.getTicket(
+        current.planId,
+        current.ticketId,
+      );
+      if (!updated) {
+        throw new Error(
+          `Ticket "${current.ticketId}" disappeared during execution`,
+        );
+      }
+      current = updated;
+
+      // Check if we reached a terminal state
+      if (
+        current.status === "complete" ||
+        current.status === "failed" ||
+        current.status === "needs_attention"
+      ) {
+        logger.info(
+          `Ticket ${current.ticketId} finished with status: ${current.status}`,
+          current.ticketId,
+        );
+        break;
+      }
+    }
+
+    return current;
+  }
+
   return {
     async runSingleTicket(planId, ticketId) {
       let ticket = await stateManager.getTicket(planId, ticketId);
@@ -151,32 +194,73 @@ export function createRunner(config: OrchestratorConfig): Runner {
 
       logger.info(`Starting ticket ${ticketId}`, ticketId);
 
-      // Loop through phases until terminal
-      while (true) {
-        ticket = await executeTicketPhase(ticket);
+      return runTicketPhases(ticket);
+    },
 
-        // Re-read from disk for consistency
-        const updated = await stateManager.getTicket(planId, ticketId);
-        if (!updated) {
-          throw new Error(`Ticket "${ticketId}" disappeared during execution`);
-        }
-        ticket = updated;
+    async tick() {
+      // 1. Resolve dependencies across all active plans
+      const plans = await stateManager.listPlans();
+      const activePlans = plans.filter((p) => p.status === "active");
 
-        // Check if we reached a terminal state
-        if (
-          ticket.status === "complete" ||
-          ticket.status === "failed" ||
-          ticket.status === "needs_attention"
-        ) {
-          logger.info(
-            `Ticket ${ticketId} finished with status: ${ticket.status}`,
-            ticketId,
-          );
-          break;
-        }
+      for (const plan of activePlans) {
+        await stateManager.resolveDependencies(plan.id);
       }
 
-      return ticket;
+      // 2. Get current running count
+      const runningCount = await stateManager.getRunningCount();
+
+      // 3. Get ready tickets
+      const readyTickets = await stateManager.getReadyTickets();
+
+      // 4. Filter out tickets already in-flight
+      const dispatchable = readyTickets.filter(
+        (t) => !inFlight.has(`${t.planId}/${t.ticketId}`),
+      );
+
+      // 5. Dispatch up to available concurrency slots
+      const available = config.maxConcurrency - runningCount - inFlight.size;
+      const toDispatch = dispatchable.slice(0, Math.max(0, available));
+
+      for (const ticket of toDispatch) {
+        const key = `${ticket.planId}/${ticket.ticketId}`;
+        inFlight.add(key);
+
+        // Set status to running
+        const running = await stateManager.updateTicket(
+          ticket.planId,
+          ticket.ticketId,
+          { status: "running" },
+        );
+
+        // Fire-and-forget
+        runTicketPhases(running)
+          .catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            logger.error(
+              `Ticket ${ticket.ticketId} failed: ${msg}`,
+              ticket.ticketId,
+            );
+          })
+          .finally(() => {
+            inFlight.delete(key);
+          });
+      }
+
+      // 6. Log tick summary
+      logger.info(
+        `Tick: dispatched=${toDispatch.length} running=${runningCount} ready=${readyTickets.length} inFlight=${inFlight.size}`,
+      );
+    },
+
+    async startDaemon(options) {
+      logger.info("Daemon started");
+
+      while (!options?.signal?.aborted) {
+        await this.tick();
+        await sleep(config.pollInterval * 1000);
+      }
+
+      logger.info("Daemon stopped");
     },
   };
 }

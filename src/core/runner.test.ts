@@ -269,6 +269,146 @@ workflows:
     expect(result.error).toContain("maxRetries");
   });
 
+  describe("tick", () => {
+    it("resolves dependencies and dispatches ready tickets", async () => {
+      await writeFile(
+        join(scriptDir, "run.sh"),
+        '#!/usr/bin/env bash\necho "ok"',
+        { mode: 0o755 },
+      );
+
+      const plan = makePlan({
+        tickets: [
+          { ticketId: "TICKET-1", order: 1, blockedBy: [] },
+          { ticketId: "TICKET-2", order: 2, blockedBy: [] },
+        ],
+      });
+      await savePlan(plan);
+      await saveTicket(makeTicket({ ticketId: "TICKET-1", status: "ready" }));
+      await saveTicket(makeTicket({ ticketId: "TICKET-2", status: "ready" }));
+
+      const runner = createRunner(config);
+      await runner.tick();
+
+      // Give fire-and-forget a moment to set status
+      await new Promise((r) => setTimeout(r, 100));
+
+      const t1 = await readTicket("test-plan", "TICKET-1");
+      const t2 = await readTicket("test-plan", "TICKET-2");
+
+      // Both should have been dispatched (set to running or already completed)
+      expect(["running", "complete", "needs_attention"]).toContain(t1.status);
+      expect(["running", "complete", "needs_attention"]).toContain(t2.status);
+    });
+
+    it("respects maxConcurrency", async () => {
+      await writeFile(
+        join(scriptDir, "run.sh"),
+        '#!/usr/bin/env bash\nsleep 2 && echo "ok"',
+        { mode: 0o755 },
+      );
+
+      const plan = makePlan({
+        tickets: [
+          { ticketId: "TICKET-1", order: 1, blockedBy: [] },
+          { ticketId: "TICKET-2", order: 2, blockedBy: [] },
+        ],
+      });
+      await savePlan(plan);
+      await saveTicket(makeTicket({ ticketId: "TICKET-1", status: "ready" }));
+      await saveTicket(makeTicket({ ticketId: "TICKET-2", status: "ready" }));
+
+      const runner = createRunner({ ...config, maxConcurrency: 1 });
+      await runner.tick();
+
+      // Give fire-and-forget a moment to set status
+      await new Promise((r) => setTimeout(r, 100));
+
+      const t1 = await readTicket("test-plan", "TICKET-1");
+      const t2 = await readTicket("test-plan", "TICKET-2");
+
+      // Only one should be dispatched, the other should still be ready
+      const statuses = [t1.status, t2.status].sort();
+      expect(statuses).toContain("ready");
+      expect(statuses).toContain("running");
+    });
+
+    it("skips paused plans", async () => {
+      await writeFile(
+        join(scriptDir, "run.sh"),
+        '#!/usr/bin/env bash\necho "ok"',
+        { mode: 0o755 },
+      );
+
+      const plan = makePlan({ status: "paused" });
+      await savePlan(plan);
+      await saveTicket(makeTicket({ status: "ready" }));
+
+      const runner = createRunner(config);
+      await runner.tick();
+
+      await new Promise((r) => setTimeout(r, 100));
+
+      const t = await readTicket("test-plan", "TICKET-1");
+      // Ticket should remain ready since the plan is paused
+      expect(t.status).toBe("ready");
+    });
+
+    it("unblocks queued tickets when dependencies complete", async () => {
+      await writeFile(
+        join(scriptDir, "run.sh"),
+        '#!/usr/bin/env bash\necho "ok"',
+        { mode: 0o755 },
+      );
+
+      const plan = makePlan({
+        tickets: [
+          { ticketId: "TICKET-1", order: 1, blockedBy: [] },
+          { ticketId: "TICKET-2", order: 2, blockedBy: ["TICKET-1"] },
+        ],
+      });
+      await savePlan(plan);
+      await saveTicket(
+        makeTicket({ ticketId: "TICKET-1", status: "complete" }),
+      );
+      await saveTicket(makeTicket({ ticketId: "TICKET-2", status: "queued" }));
+
+      const runner = createRunner(config);
+      await runner.tick();
+
+      await new Promise((r) => setTimeout(r, 100));
+
+      const t2 = await readTicket("test-plan", "TICKET-2");
+      // TICKET-2 should have been unblocked (queued→ready) and then dispatched
+      expect(["ready", "running", "complete"]).toContain(t2.status);
+    });
+
+    it("startDaemon respects AbortSignal", async () => {
+      await writeFile(
+        join(scriptDir, "run.sh"),
+        '#!/usr/bin/env bash\necho "ok"',
+        { mode: 0o755 },
+      );
+
+      const plan = makePlan();
+      await savePlan(plan);
+      await saveTicket(makeTicket());
+
+      const runner = createRunner({ ...config, pollInterval: 0.1 });
+      const controller = new AbortController();
+
+      // Abort after a short delay
+      setTimeout(() => controller.abort(), 200);
+
+      const start = Date.now();
+      await runner.startDaemon({ signal: controller.signal });
+      const elapsed = Date.now() - start;
+
+      // Should have stopped within reasonable time (not running indefinitely)
+      expect(elapsed).toBeLessThan(5000);
+    });
+  });
+
   it("handles agent phase without promptTemplate gracefully", async () => {
     // Agent phase missing promptTemplate should fail and follow onFailure
     const agentWorkflowYaml = `
