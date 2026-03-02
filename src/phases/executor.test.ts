@@ -368,31 +368,19 @@ describe("executor", () => {
   });
 
   describe("poll phase", () => {
-    it("polls until script succeeds", async () => {
-      const counterFile = join(tmpDir, "counter");
-      await writeFile(counterFile, "0");
-
+    it("returns success when script exits 0", async () => {
       await writeFile(
-        join(scriptDir, "poll-counter.sh"),
-        `#!/usr/bin/env bash
-COUNTER_FILE="$1"
-COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo "0")
-COUNT=$((COUNT + 1))
-echo "$COUNT" > "$COUNTER_FILE"
-if [ "$COUNT" -ge 3 ]; then
-  echo "ready"
-  exit 0
-fi
-exit 1`,
+        join(scriptDir, "poll-ready.sh"),
+        '#!/usr/bin/env bash\necho "ready"\nexit 0',
         { mode: 0o755 },
       );
 
       const phase: PhaseDefinition = {
         id: "poll_phase",
         type: "poll",
-        command: "poll-counter.sh",
-        args: [counterFile],
-        intervalSeconds: 0.05,
+        command: "poll-ready.sh",
+        args: [],
+        intervalSeconds: 60,
         timeoutSeconds: 5,
         maxRetries: 0,
         notify: false,
@@ -407,11 +395,12 @@ exit 1`,
       expect(result.success).toBe(true);
       expect(result.output.trim()).toBe("ready");
       expect(result.nextPhase).toBe("next");
+      expect(result.pending).toBeFalsy();
     });
 
-    it("returns failure on timeout", async () => {
+    it("returns pending when script exits 1", async () => {
       await writeFile(
-        join(scriptDir, "always-wait.sh"),
+        join(scriptDir, "not-ready.sh"),
         "#!/usr/bin/env bash\nexit 1",
         { mode: 0o755 },
       );
@@ -419,14 +408,14 @@ exit 1`,
       const phase: PhaseDefinition = {
         id: "poll_phase",
         type: "poll",
-        command: "always-wait.sh",
+        command: "not-ready.sh",
         args: [],
-        intervalSeconds: 0.05,
-        timeoutSeconds: 0.2,
+        intervalSeconds: 60,
+        timeoutSeconds: 86400,
         maxRetries: 0,
         notify: false,
         onSuccess: "next",
-        onFailure: "timeout_fail",
+        onFailure: "fail",
       };
 
       const renderer = createTemplateRenderer(promptDir);
@@ -434,8 +423,8 @@ exit 1`,
       const result = await executor.execute(phase, makeTicket(), null);
 
       expect(result.success).toBe(false);
-      expect(result.output).toContain("timeout");
-      expect(result.nextPhase).toBe("timeout_fail");
+      expect(result.pending).toBe(true);
+      expect(result.nextPhase).toBe("poll_phase");
     });
 
     it("returns failure immediately on exit code >= 2", async () => {
@@ -465,6 +454,7 @@ exit 1`,
       expect(result.success).toBe(false);
       expect(result.output).toContain("fatal error");
       expect(result.nextPhase).toBe("error_handler");
+      expect(result.pending).toBeFalsy();
     });
 
     it("captures values on successful poll", async () => {

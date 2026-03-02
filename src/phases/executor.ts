@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { invokeAgent } from "../agents/invoke.js";
 import { resolveAgent } from "../core/config.js";
@@ -16,6 +17,7 @@ export interface PhaseResult {
   output: string;
   captured: Record<string, string>;
   nextPhase: string | null;
+  pending?: boolean;
 }
 
 export interface PhaseExecutor {
@@ -31,6 +33,11 @@ export function createPhaseExecutor(
   templateRenderer: TemplateRenderer,
   logger: Logger,
 ): PhaseExecutor {
+  function resolveCwd(ticket: TicketState): string | undefined {
+    const dir = ticket.worktree || undefined;
+    return dir && existsSync(dir) ? dir : undefined;
+  }
+
   async function runScript(
     phase: PhaseDefinition,
     ticket: TicketState,
@@ -50,7 +57,7 @@ export function createPhaseExecutor(
     );
 
     const result = await execCommand("/bin/bash", [scriptPath, ...args], {
-      cwd: ticket.worktree || undefined,
+      cwd: resolveCwd(ticket),
       timeoutMs: phase.timeoutSeconds ? phase.timeoutSeconds * 1000 : undefined,
     });
 
@@ -77,7 +84,7 @@ export function createPhaseExecutor(
         captured[key] = phaseOutput;
       } else {
         const result = await execCommand("bash", ["-c", value], {
-          cwd: ticket.worktree || undefined,
+          cwd: resolveCwd(ticket),
         });
         captured[key] = result.stdout.trim();
       }
@@ -136,7 +143,7 @@ export function createPhaseExecutor(
       agentConfig,
       {
         prompt,
-        cwd: ticket.worktree || undefined,
+        cwd: resolveCwd(ticket),
         allowedTools: phase.allowedTools,
         maxTurns: phase.maxTurns,
       },
@@ -173,48 +180,40 @@ export function createPhaseExecutor(
     const args = (phase.args ?? []).map((a) =>
       templateRenderer.renderString(a, ticket),
     );
-    const interval = (phase.intervalSeconds ?? config.pollInterval) * 1000;
-    const timeout = (phase.timeoutSeconds ?? 86400) * 1000;
-    const start = Date.now();
 
     logger.info(`Polling: ${scriptPath} ${args.join(" ")}`, ticket.ticketId);
 
-    while (true) {
-      const result = await execCommand("/bin/bash", [scriptPath, ...args], {
-        cwd: ticket.worktree || undefined,
-      });
+    const result = await execCommand("/bin/bash", [scriptPath, ...args], {
+      cwd: resolveCwd(ticket),
+    });
 
-      if (result.exitCode === 0) {
-        const captured = await captureValues(phase, result.stdout, ticket);
-        return {
-          success: true,
-          output: result.stdout,
-          captured,
-          nextPhase: getNextPhase(phase, true),
-        };
-      }
-
-      if (result.exitCode >= 2) {
-        return {
-          success: false,
-          output: result.stdout || result.stderr,
-          captured: {},
-          nextPhase: getNextPhase(phase, false),
-        };
-      }
-
-      // Exit code 1 = not ready, check timeout
-      if (Date.now() - start >= timeout) {
-        return {
-          success: false,
-          output: "Poll timeout exceeded",
-          captured: {},
-          nextPhase: getNextPhase(phase, false),
-        };
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, interval));
+    if (result.exitCode === 0) {
+      const captured = await captureValues(phase, result.stdout, ticket);
+      return {
+        success: true,
+        output: result.stdout,
+        captured,
+        nextPhase: getNextPhase(phase, true),
+      };
     }
+
+    if (result.exitCode >= 2) {
+      return {
+        success: false,
+        output: result.stdout || result.stderr,
+        captured: {},
+        nextPhase: getNextPhase(phase, false),
+      };
+    }
+
+    // Exit code 1 = not ready, yield back to the daemon loop
+    return {
+      success: false,
+      output: "",
+      captured: {},
+      nextPhase: phase.id,
+      pending: true,
+    };
   }
 
   async function executeScriptPhase(

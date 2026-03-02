@@ -9,6 +9,14 @@ export const AgentConfigSchema = z.object({
 
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 
+export const McpServerConfigSchema = z.object({
+  command: z.string(),
+  args: z.array(z.string()).default([]),
+  env: z.record(z.string(), z.string()).optional(),
+});
+
+export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
+
 export const OrchestratorConfigSchema = z.object({
   defaultAgent: z.string(),
   agents: z.record(z.string(), AgentConfigSchema),
@@ -20,6 +28,7 @@ export const OrchestratorConfigSchema = z.object({
   pollInterval: z.number().default(10),
   maxConcurrency: z.number().default(3),
   ghCommand: z.string().default("gh"),
+  mcpServers: z.record(z.string(), McpServerConfigSchema).optional(),
 });
 
 export type OrchestratorConfig = z.infer<typeof OrchestratorConfigSchema>;

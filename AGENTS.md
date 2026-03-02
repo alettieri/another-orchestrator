@@ -1,70 +1,66 @@
-# Shell Environment
-
-If `pnpm` is not found when running a command, load the correct Node version via nvm:
-```sh
-source ~/.nvm/nvm.sh && nvm use
-```
-Only run this once per session and only if needed.
-
 # Another Orchestrator
 
-A CLI-driven orchestrator for managing agent workflows, plans, and tickets.
+A CLI-driven orchestrator that separates planning (interactive LLM conversation) from execution (deterministic state machine).
 
-## Stack
+## Architecture
 
-- **Runtime**: Node 24 (see `.nvmrc`)
-- **Package manager**: pnpm
-- **Language**: TypeScript (strict mode, ES2022, Node16 module resolution)
-- **Validation**: Zod schemas in `src/core/types.ts`
-- **Linter/Formatter**: Biome (`biome.json`)
-- **Test framework**: Vitest (no globals — use explicit imports from `vitest`)
-- **CI**: GitHub Actions (`.github/workflows/ci.yml`)
+```
+orchestrator plan → interactive PI session → user describes work → PI creates state files
+orchestrator daemon → reads state files → walks YAML workflows → dispatches headless agents
+```
 
-## Commands
+**Two processes, one interface:** The state directory (`state/plans/`) is the only interface between the planner and runner. The planner writes JSON files. The runner reads and updates them.
+
+## Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/core/types.ts` | All Zod schemas and TypeScript types |
+| `src/core/state.ts` | State manager — reads/writes plan and ticket JSON files |
+| `src/core/runner.ts` | Runner — deterministic state machine that executes workflows |
+| `src/core/config.ts` | Config loader — reads `orchestrator.yaml` |
+| `src/core/workflow.ts` | Workflow loader — reads YAML workflow definitions |
+| `src/agents/invoke.ts` | Agent invocation — spawns coding agents as subprocesses |
+| `src/agents/interactive.ts` | Interactive spawner — launches PI with `stdio: inherit` |
+| `src/cli.ts` | CLI entry point — all commands |
+| `orchestrator.yaml` | Runtime configuration |
+
+## Deep Documentation
+
+For detailed reference on specific topics:
+
+- **Planning**: `skills/planner/SKILL.md` — plan/ticket JSON schemas, field reference, examples, naming conventions
+- **Workflows**: `skills/workflows/SKILL.md` — phase types, template variables, capture rules, authoring guide
+- **Workflow registry**: `workflows/registry.yaml` — available workflows with descriptions
+- **Linear integration**: `skills/providers/linear/SKILL.md` — fetching from Linear, field mapping
+- **GitHub Issues**: `skills/providers/github-issues/SKILL.md` — fetching with `gh`, field mapping
+
+## State Directory Layout
+
+```
+state/plans/
+├── sprint-12-backend/
+│   ├── plan.json              ← plan metadata + ticket list
+│   └── tickets/
+│       ├── PROJ-101.json      ← ticket execution state
+│       └── PROJ-102.json
+```
+
+## CLI Commands
 
 ```sh
-pnpm run lint        # biome check .
-pnpm run lint:fix    # biome check --write .
-pnpm run format      # biome format --write .
-pnpm run typecheck   # tsc --noEmit
-pnpm run test        # vitest run
-pnpm run test:watch  # vitest (watch mode)
-pnpm run build       # tsc → dist/
-```
-
-## Project Structure
-
-```
-src/
-  core/           # Shared types, schemas, utilities
-  cli.ts          # CLI entry point
+orchestrator plan [--repo <path>] [--workflow <name>]  # Interactive planning
+orchestrator status [--plan <id>] [--json]             # View state
+orchestrator run <planId> <ticketId>                    # Run single ticket
+orchestrator daemon [--concurrency <n>]                 # Process all plans
+orchestrator pause|resume <planId> <ticketId>           # Control tickets
+orchestrator pause-plan|resume-plan <planId>            # Control plans
 ```
 
 ## Conventions
 
-### Code Style
-
-- Biome handles formatting and linting — do not use Prettier or ESLint.
-- 2-space indentation, double quotes.
-- Run `pnpm run lint:fix` to auto-fix before committing.
-
-### Testing
-
-- Test files live next to their source: `foo.ts` → `foo.test.ts`.
-- Import `describe`, `it`, `expect` explicitly from `vitest` (no globals).
-- Test Zod schemas by checking: valid parsing, default values, and rejection of invalid data.
-- Keep tests focused — one behavior per `it()` block.
-
-### Types
-
-- All data shapes are defined as Zod schemas in `src/core/types.ts`.
-- Export both the schema (`FooSchema`) and inferred type (`Foo`).
-- Prefer Zod defaults over optional fields where a sensible default exists.
-
-### Workflow
-
-1. Write or modify code.
-2. Run `pnpm run lint:fix` to format.
-3. Run `pnpm run typecheck` to catch type errors.
-4. Run `pnpm run test` to verify behavior.
-5. All three must pass before considering work complete.
+- **Runtime**: Node 24, pnpm, TypeScript strict mode
+- **Formatting**: Biome — 2-space indent, double quotes, `pnpm run lint:fix`
+- **Testing**: Vitest — explicit imports, test files next to source (`foo.test.ts`)
+- **Types**: Zod schemas in `src/core/types.ts`, export both schema and inferred type
+- **Validation**: `pnpm run lint:fix && pnpm run typecheck && pnpm run test`

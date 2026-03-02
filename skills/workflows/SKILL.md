@@ -1,3 +1,7 @@
+---
+description: Author and register custom YAML workflows for the orchestrator
+---
+
 # Workflow Authoring Skill
 
 This skill teaches you how to create and register custom YAML workflows for the Agent Orchestrator.

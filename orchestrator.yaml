@@ -10,6 +10,9 @@ agents:
     defaultArgs:
       - "--approval-mode"
       - "never"
+  pi:
+    command: pi
+    defaultArgs: []
 
 stateDir: ./state
 logDir: ./logs
@@ -21,3 +24,8 @@ pollInterval: 10
 maxConcurrency: 3
 
 ghCommand: gh
+
+mcpServers:
+  linear:
+    command: npx
+    args: ["-y", "mcp-remote", "https://mcp.linear.app/mcp"]

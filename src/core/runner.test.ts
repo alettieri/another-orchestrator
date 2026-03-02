@@ -409,6 +409,284 @@ workflows:
     });
   });
 
+  describe("poll phase", () => {
+    const pollWorkflowYaml = `
+name: poll-workflow
+description: "Poll workflow"
+phases:
+  - id: poll_check
+    type: poll
+    command: check.sh
+    intervalSeconds: 1
+    timeoutSeconds: 86400
+    onSuccess: complete
+    onFailure: handle_failure
+  - id: complete
+    type: terminal
+  - id: handle_failure
+    type: terminal
+    notify: true
+`;
+
+    const pollRegistryYaml = `
+workflows:
+  - name: poll-workflow
+    file: poll.yaml
+    description: "Poll workflow"
+    tags: [test]
+`;
+
+    it("sets ticket to ready without incrementing retries when poll is pending", async () => {
+      await writeFile(
+        join(scriptDir, "check.sh"),
+        "#!/usr/bin/env bash\nexit 1",
+        { mode: 0o755 },
+      );
+      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
+      await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
+
+      const plan = makePlan({ workflow: "poll-workflow" });
+      const ticket = makeTicket({
+        workflow: "poll-workflow",
+        currentPhase: "poll_check",
+      });
+      await savePlan(plan);
+      await saveTicket(ticket);
+
+      const runner = createRunner(config);
+      const result = await runner.runSingleTicket("test-plan", "TICKET-1");
+
+      expect(result.status).toBe("ready");
+      expect(result.currentPhase).toBe("poll_check");
+      expect(result.retries.poll_check ?? 0).toBe(0);
+    });
+
+    it("stores poll start time in context", async () => {
+      await writeFile(
+        join(scriptDir, "check.sh"),
+        "#!/usr/bin/env bash\nexit 1",
+        { mode: 0o755 },
+      );
+      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
+      await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
+
+      const plan = makePlan({ workflow: "poll-workflow" });
+      const ticket = makeTicket({
+        workflow: "poll-workflow",
+        currentPhase: "poll_check",
+      });
+      await savePlan(plan);
+      await saveTicket(ticket);
+
+      const runner = createRunner(config);
+      const result = await runner.runSingleTicket("test-plan", "TICKET-1");
+
+      expect(result.context._pollStart_poll_check).toBeDefined();
+      const pollStart = new Date(
+        result.context._pollStart_poll_check,
+      ).getTime();
+      expect(pollStart).toBeLessThanOrEqual(Date.now());
+    });
+
+    it("advances on poll success", async () => {
+      await writeFile(
+        join(scriptDir, "check.sh"),
+        '#!/usr/bin/env bash\necho "done"\nexit 0',
+        { mode: 0o755 },
+      );
+      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
+      await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
+
+      const plan = makePlan({ workflow: "poll-workflow" });
+      const ticket = makeTicket({
+        workflow: "poll-workflow",
+        currentPhase: "poll_check",
+      });
+      await savePlan(plan);
+      await saveTicket(ticket);
+
+      const runner = createRunner(config);
+      const result = await runner.runSingleTicket("test-plan", "TICKET-1");
+
+      expect(result.status).toBe("complete");
+      expect(result.currentPhase).toBe("complete");
+    });
+
+    it("times out after exceeding timeoutSeconds", async () => {
+      await writeFile(
+        join(scriptDir, "check.sh"),
+        "#!/usr/bin/env bash\nexit 1",
+        { mode: 0o755 },
+      );
+
+      const shortTimeoutYaml = `
+name: poll-timeout
+description: "Poll with short timeout"
+phases:
+  - id: poll_check
+    type: poll
+    command: check.sh
+    intervalSeconds: 1
+    timeoutSeconds: 0
+    onSuccess: complete
+    onFailure: handle_failure
+  - id: complete
+    type: terminal
+  - id: handle_failure
+    type: terminal
+    notify: true
+`;
+      const shortTimeoutRegistry = `
+workflows:
+  - name: poll-timeout
+    file: poll-timeout.yaml
+    description: "Poll timeout workflow"
+    tags: [test]
+`;
+      await writeFile(join(workflowDir, "registry.yaml"), shortTimeoutRegistry);
+      await writeFile(join(workflowDir, "poll-timeout.yaml"), shortTimeoutYaml);
+
+      const plan = makePlan({ workflow: "poll-timeout" });
+      const ticket = makeTicket({
+        workflow: "poll-timeout",
+        currentPhase: "poll_check",
+        context: {
+          _pollStart_poll_check: new Date(Date.now() - 1000).toISOString(),
+        },
+      });
+      await savePlan(plan);
+      await saveTicket(ticket);
+
+      const runner = createRunner(config);
+      const result = await runner.runSingleTicket("test-plan", "TICKET-1");
+
+      expect(result.status).toBe("failed");
+      expect(result.error).toContain("Poll timeout exceeded");
+    });
+
+    it("clears poll start time when poll succeeds", async () => {
+      await writeFile(
+        join(scriptDir, "check.sh"),
+        '#!/usr/bin/env bash\necho "done"\nexit 0',
+        { mode: 0o755 },
+      );
+      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
+      await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
+
+      const plan = makePlan({ workflow: "poll-workflow" });
+      const ticket = makeTicket({
+        workflow: "poll-workflow",
+        currentPhase: "poll_check",
+        context: { _pollStart_poll_check: new Date().toISOString() },
+      });
+      await savePlan(plan);
+      await saveTicket(ticket);
+
+      const runner = createRunner(config);
+      const result = await runner.runSingleTicket("test-plan", "TICKET-1");
+
+      expect(result.status).toBe("complete");
+      expect(result.context._pollStart_poll_check).toBeUndefined();
+      expect(result.context._pollNextCheck_poll_check).toBeUndefined();
+    });
+
+    it("stores poll next check time in context", async () => {
+      await writeFile(
+        join(scriptDir, "check.sh"),
+        "#!/usr/bin/env bash\nexit 1",
+        { mode: 0o755 },
+      );
+      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
+      await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
+
+      const plan = makePlan({ workflow: "poll-workflow" });
+      const ticket = makeTicket({
+        workflow: "poll-workflow",
+        currentPhase: "poll_check",
+      });
+      await savePlan(plan);
+      await saveTicket(ticket);
+
+      const runner = createRunner(config);
+      const result = await runner.runSingleTicket("test-plan", "TICKET-1");
+
+      expect(result.context._pollNextCheck_poll_check).toBeDefined();
+      const nextCheck = new Date(
+        result.context._pollNextCheck_poll_check,
+      ).getTime();
+      // intervalSeconds is 1, so next check should be ~1s in the future
+      expect(nextCheck).toBeGreaterThan(Date.now() - 500);
+    });
+
+    it("tick skips poll ticket when interval has not elapsed", async () => {
+      await writeFile(
+        join(scriptDir, "check.sh"),
+        "#!/usr/bin/env bash\nexit 1",
+        { mode: 0o755 },
+      );
+      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
+      await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
+
+      const plan = makePlan({ workflow: "poll-workflow" });
+      // Ticket is ready but has a next check time 10 minutes in the future
+      const ticket = makeTicket({
+        workflow: "poll-workflow",
+        currentPhase: "poll_check",
+        status: "ready",
+        context: {
+          _pollStart_poll_check: new Date().toISOString(),
+          _pollNextCheck_poll_check: new Date(
+            Date.now() + 600_000,
+          ).toISOString(),
+        },
+      });
+      await savePlan(plan);
+      await saveTicket(ticket);
+
+      const runner = createRunner(config);
+      await runner.tick();
+
+      await new Promise((r) => setTimeout(r, 100));
+
+      const t = await readTicket("test-plan", "TICKET-1");
+      // Should still be ready — tick skipped it due to interval
+      expect(t.status).toBe("ready");
+    });
+
+    it("tick dispatches poll ticket when interval has elapsed", async () => {
+      await writeFile(
+        join(scriptDir, "check.sh"),
+        '#!/usr/bin/env bash\necho "done"\nexit 0',
+        { mode: 0o755 },
+      );
+      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
+      await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
+
+      const plan = makePlan({ workflow: "poll-workflow" });
+      // Ticket is ready and next check time is in the past
+      const ticket = makeTicket({
+        workflow: "poll-workflow",
+        currentPhase: "poll_check",
+        status: "ready",
+        context: {
+          _pollStart_poll_check: new Date(Date.now() - 5000).toISOString(),
+          _pollNextCheck_poll_check: new Date(Date.now() - 1000).toISOString(),
+        },
+      });
+      await savePlan(plan);
+      await saveTicket(ticket);
+
+      const runner = createRunner(config);
+      await runner.tick();
+
+      await new Promise((r) => setTimeout(r, 200));
+
+      const t = await readTicket("test-plan", "TICKET-1");
+      // Should have been dispatched and completed
+      expect(t.status).toBe("complete");
+    });
+  });
+
   it("handles agent phase without promptTemplate gracefully", async () => {
     // Agent phase missing promptTemplate should fail and follow onFailure
     const agentWorkflowYaml = `

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
-import { copyFile, mkdir } from "node:fs/promises";
+import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { Command } from "commander";
-import { loadConfig } from "./core/config.js";
+import { buildPlanEnv, spawnInteractive } from "./agents/interactive.js";
+import { loadConfig, resolveAgent } from "./core/config.js";
 import { createRunner } from "./core/runner.js";
 import { createStateManager } from "./core/state.js";
 import { createLogger } from "./utils/logger.js";
@@ -176,6 +177,9 @@ program
       console.error(chalk.red(`Daemon error: ${msg}`));
       process.exitCode = 1;
     }
+
+    console.log(chalk.bold("Daemon stopped"));
+    process.exit(process.exitCode ?? 0);
   });
 
 program
@@ -291,6 +295,73 @@ program
     await state.savePlan({ ...plan, status: "active" });
     console.log(chalk.green(`Resumed plan ${planId}`));
   });
+
+program
+  .command("plan")
+  .description("Launch an interactive PI session for planning")
+  .option("-r, --repo <path>", "Target repository path", ".")
+  .option("-w, --workflow <name>", "Default workflow to use")
+  .option("--worktree-root <path>", "Root directory for worktrees")
+  .action(
+    async (opts: {
+      repo: string;
+      workflow?: string;
+      worktreeRoot?: string;
+    }) => {
+      const config = await loadConfig();
+
+      const agentName = resolveAgent(config, null, null, "pi");
+      const agentConfig = config.agents[agentName];
+
+      const planEnv = buildPlanEnv(config, {
+        repo: opts.repo,
+        workflow: opts.workflow,
+        worktreeRoot: opts.worktreeRoot,
+      });
+
+      // Write .pi/mcp.json if mcpServers are configured
+      if (config.mcpServers && Object.keys(config.mcpServers).length > 0) {
+        const mcpConfig: Record<string, unknown> = { mcpServers: {} };
+        for (const [name, server] of Object.entries(config.mcpServers)) {
+          const entry: Record<string, unknown> = {
+            command: server.command,
+            args: server.args,
+          };
+          if (server.env) {
+            // Interpolate env vars from process.env
+            const resolvedEnv: Record<string, string> = {};
+            for (const [k, v] of Object.entries(server.env)) {
+              resolvedEnv[k] = v.replace(/\$\{(\w+)\}/g, (_match, varName) => {
+                return process.env[varName] ?? "";
+              });
+            }
+            entry.env = resolvedEnv;
+          }
+          (mcpConfig.mcpServers as Record<string, unknown>)[name] = entry;
+        }
+
+        const mcpJsonPath = join(resolve(opts.repo), ".pi", "mcp.json");
+        await mkdir(dirname(mcpJsonPath), { recursive: true });
+        await writeFile(mcpJsonPath, JSON.stringify(mcpConfig, null, 2));
+      }
+
+      console.log(chalk.bold("Launching PI planning session..."));
+      console.log(chalk.dim(`  Repo: ${planEnv.ORCHESTRATOR_REPO}`));
+      if (planEnv.ORCHESTRATOR_WORKFLOW) {
+        console.log(chalk.dim(`  Workflow: ${planEnv.ORCHESTRATOR_WORKFLOW}`));
+      }
+      console.log();
+
+      const exitCode = await spawnInteractive({
+        command: agentConfig.command,
+        args: agentConfig.defaultArgs,
+        cwd: resolve(opts.repo),
+        env: planEnv,
+      });
+
+      process.exitCode = exitCode;
+    },
+  );
 
 function colorStatus(status: string): string {
   switch (status) {

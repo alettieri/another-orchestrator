@@ -1,3 +1,7 @@
+---
+description: Fetch tickets from Linear and create orchestrator state files
+---
+
 # Linear Provider Skill
 
 This skill teaches you how to fetch tickets from Linear and create orchestrator plan and ticket state files from them.

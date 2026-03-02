@@ -1,3 +1,7 @@
+---
+description: Fetch issues from GitHub and create orchestrator state files
+---
+
 # GitHub Issues Provider Skill
 
 This skill teaches you how to fetch issues from GitHub and create orchestrator plan and ticket state files from them.

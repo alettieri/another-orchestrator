@@ -4,3 +4,4 @@ state/
 logs/
 *.log
 .DS_Store
+.pi/

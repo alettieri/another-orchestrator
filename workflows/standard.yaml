@@ -4,7 +4,7 @@ description: "Standard workflow: setup, implement, review, simplify, verify, cre
 phases:
   - id: setup
     type: script
-    command: setup.sh
+    command: setup-worktree.sh
     args:
       - "{{ repo }}"
       - "{{ branch }}"
@@ -103,7 +103,7 @@ phases:
 
   - id: cleanup
     type: script
-    command: cleanup.sh
+    command: cleanup-worktree.sh
     args:
       - "{{ worktree }}"
     onSuccess: complete
