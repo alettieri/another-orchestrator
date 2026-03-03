@@ -1,92 +1,116 @@
-import { appendFile, mkdir } from "node:fs/promises";
+import { createWriteStream, mkdirSync, type WriteStream } from "node:fs";
 import { join } from "node:path";
-import chalk from "chalk";
+import { Writable } from "node:stream";
+import pino from "pino";
+import pretty from "pino-pretty";
 
 export interface Logger {
-  info(message: string, ticketId?: string): void;
-  warn(message: string, ticketId?: string): void;
-  error(message: string, ticketId?: string): void;
-  success(message: string, ticketId?: string): void;
-  phaseStart(phase: string, ticketId: string): void;
-  phaseEnd(phase: string, ticketId: string, status: string): void;
-  agentOutput(ticketId: string, output: string): void;
+  info(msg: string): void;
+  warn(msg: string): void;
+  error(msg: string): void;
+  success(msg: string): void;
+  trace(msg: string): void;
+  child(bindings: Record<string, string>): Logger;
 }
 
-function timestamp(): string {
-  const now = new Date();
-  const h = String(now.getHours()).padStart(2, "0");
-  const m = String(now.getMinutes()).padStart(2, "0");
-  const s = String(now.getSeconds()).padStart(2, "0");
-  return `${h}:${m}:${s}`;
+/**
+ * Routes pino JSON log lines to per-ticket files based on the ticketId binding.
+ * Lines without a ticketId are silently dropped.
+ */
+class TicketFileRouter extends Writable {
+  private fileStreams = new Map<string, WriteStream>();
+
+  constructor(private logDir: string) {
+    super();
+  }
+
+  override _write(
+    chunk: Buffer,
+    _encoding: BufferEncoding,
+    callback: (error?: Error | null) => void,
+  ): void {
+    try {
+      const line = chunk.toString();
+      const parsed = JSON.parse(line);
+      const ticketId = parsed.ticketId;
+      if (!ticketId) {
+        callback();
+        return;
+      }
+      const stream = this.getOrCreateStream(ticketId);
+      if (!stream.write(line)) {
+        stream.once("drain", () => callback());
+      } else {
+        callback();
+      }
+    } catch {
+      callback();
+    }
+  }
+
+  private getOrCreateStream(ticketId: string): WriteStream {
+    let stream = this.fileStreams.get(ticketId);
+    if (!stream) {
+      const filePath = join(this.logDir, `${ticketId}.log`);
+      stream = createWriteStream(filePath, { flags: "a" });
+      this.fileStreams.set(ticketId, stream);
+    }
+    return stream;
+  }
 }
 
-async function writeToFile(logDir: string, ticketId: string, line: string) {
-  await mkdir(logDir, { recursive: true });
-  const filePath = join(logDir, `${ticketId}.log`);
-  await appendFile(filePath, `${line}\n`);
-}
-
-function fileTimestamp(): string {
-  return new Date().toISOString();
+function wrapPino(pinoLogger: pino.Logger<"success">): Logger {
+  return {
+    info(msg) {
+      pinoLogger.info(msg);
+    },
+    warn(msg) {
+      pinoLogger.warn(msg);
+    },
+    error(msg) {
+      pinoLogger.error(msg);
+    },
+    success(msg) {
+      pinoLogger.success(msg);
+    },
+    trace(msg) {
+      pinoLogger.trace(msg);
+    },
+    child(bindings) {
+      return wrapPino(pinoLogger.child(bindings));
+    },
+  };
 }
 
 export function createLogger(logDir: string): Logger {
-  function consoleLog(
-    level: string,
-    colorFn: (s: string) => string,
-    message: string,
-    ticketId?: string,
-  ) {
-    const tag = ticketId ? ` [${ticketId}]` : "";
-    console.log(`[${timestamp()}] [${colorFn(level)}]${tag} ${message}`);
-  }
+  mkdirSync(logDir, { recursive: true });
 
-  function fileLog(level: string, ticketId: string, message: string) {
-    const line = `[${fileTimestamp()}] [${level}] ${message}`;
-    writeToFile(logDir, ticketId, line).catch(() => {});
-  }
-
-  return {
-    info(message, ticketId) {
-      consoleLog("INFO", chalk.blue, message, ticketId);
-      if (ticketId) fileLog("INFO", ticketId, message);
+  const prettyStream = pretty({
+    colorize: true,
+    ignore: "pid,hostname,ticketId",
+    translateTime: "SYS:HH:mm:ss",
+    customLevels: "success:35",
+    customColors: "success:green",
+    messageFormat: (log: Record<string, unknown>, messageKey: string) => {
+      const tag = log.ticketId ? `[${log.ticketId}] ` : "";
+      return `${tag}${log[messageKey]}`;
     },
+  });
 
-    warn(message, ticketId) {
-      consoleLog("WARN", chalk.yellow, message, ticketId);
-      if (ticketId) fileLog("WARN", ticketId, message);
-    },
+  const fileRouter = new TicketFileRouter(logDir);
 
-    error(message, ticketId) {
-      consoleLog("ERROR", chalk.red, message, ticketId);
-      if (ticketId) fileLog("ERROR", ticketId, message);
-    },
+  const streams = pino.multistream([
+    { stream: prettyStream, level: "info" },
+    { stream: fileRouter, level: "trace" },
+  ]);
 
-    success(message, ticketId) {
-      consoleLog("SUCCESS", chalk.green, message, ticketId);
-      if (ticketId) fileLog("SUCCESS", ticketId, message);
+  const pinoLogger = pino<"success">(
+    {
+      customLevels: { success: 35 },
+      level: "trace",
     },
+    streams,
+  );
 
-    phaseStart(phase, ticketId) {
-      const msg = `Phase "${phase}" started`;
-      consoleLog("INFO", chalk.blue, msg, ticketId);
-      fileLog("INFO", ticketId, msg);
-    },
-
-    phaseEnd(phase, ticketId, status) {
-      const msg = `Phase "${phase}" ended with status: ${status}`;
-      const colorFn = status === "success" ? chalk.green : chalk.red;
-      consoleLog(
-        status === "success" ? "SUCCESS" : "ERROR",
-        colorFn,
-        msg,
-        ticketId,
-      );
-      fileLog(status === "success" ? "SUCCESS" : "ERROR", ticketId, msg);
-    },
-
-    agentOutput(ticketId, output) {
-      fileLog("AGENT", ticketId, output);
-    },
-  };
+  return wrapPino(pinoLogger);
 }

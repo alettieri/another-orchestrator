@@ -12,15 +12,17 @@ import type { Logger } from "../utils/logger.js";
 import { createPhaseExecutor } from "./executor.js";
 
 function makeLogger(): Logger {
-  return {
+  const noop: Logger = {
     info() {},
     warn() {},
     error() {},
     success() {},
-    phaseStart() {},
-    phaseEnd() {},
-    agentOutput() {},
+    trace() {},
+    child() {
+      return noop;
+    },
   };
+  return noop;
 }
 
 function makeTicket(overrides: Partial<TicketState> = {}): TicketState {

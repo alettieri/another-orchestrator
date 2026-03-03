@@ -42,6 +42,7 @@ export function createRunner(config: OrchestratorConfig): Runner {
   async function executeTicketPhase(
     ticket: TicketState,
   ): Promise<{ ticket: TicketState; pendingPoll: boolean }> {
+    const log = logger.child({ ticketId: ticket.ticketId });
     const plan = await stateManager.getPlan(ticket.planId);
     const planAgent = plan?.agent ?? null;
 
@@ -53,9 +54,8 @@ export function createRunner(config: OrchestratorConfig): Runner {
     // Check retries vs maxRetries
     const currentRetries = ticket.retries[ticket.currentPhase] ?? 0;
     if (phase.maxRetries !== undefined && currentRetries > phase.maxRetries) {
-      logger.error(
+      log.error(
         `Phase "${ticket.currentPhase}" exceeded maxRetries (${phase.maxRetries})`,
-        ticket.ticketId,
       );
       const updated = await stateManager.updateTicket(
         ticket.planId,
@@ -69,15 +69,14 @@ export function createRunner(config: OrchestratorConfig): Runner {
     }
 
     const startedAt = new Date().toISOString();
-    logger.phaseStart(ticket.currentPhase, ticket.ticketId);
+    log.info(`Phase "${ticket.currentPhase}" started`);
 
     let result: PhaseResult;
     try {
       result = await phaseExecutor.execute(phase, ticket, planAgent);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      logger.phaseEnd(ticket.currentPhase, ticket.ticketId, "failure");
-      logger.error(`Phase error: ${errorMsg}`, ticket.ticketId);
+      log.error(`Phase "${ticket.currentPhase}" failed: ${errorMsg}`);
 
       const completedAt = new Date().toISOString();
       const historyEntry = {
@@ -114,11 +113,7 @@ export function createRunner(config: OrchestratorConfig): Runner {
       const timeoutMs = (phase.timeoutSeconds ?? 86400) * 1000;
       const pollStartTime = new Date(newContext[pollStartKey]).getTime();
       if (Date.now() - pollStartTime >= timeoutMs) {
-        logger.phaseEnd(ticket.currentPhase, ticket.ticketId, "failure");
-        logger.error(
-          `Poll "${ticket.currentPhase}" timed out`,
-          ticket.ticketId,
-        );
+        log.error(`Poll "${ticket.currentPhase}" timed out`);
 
         const completedAt = new Date().toISOString();
         const historyEntry = {
@@ -150,9 +145,8 @@ export function createRunner(config: OrchestratorConfig): Runner {
         Date.now() + intervalMs,
       ).toISOString();
 
-      logger.info(
+      log.info(
         `Poll "${ticket.currentPhase}" not ready, will retry in ${phase.intervalSeconds ?? config.pollInterval}s`,
-        ticket.ticketId,
       );
       const updated = await stateManager.updateTicket(
         ticket.planId,
@@ -169,15 +163,11 @@ export function createRunner(config: OrchestratorConfig): Runner {
     const completedAt = new Date().toISOString();
     const durationMs =
       new Date(completedAt).getTime() - new Date(startedAt).getTime();
-    logger.phaseEnd(
-      ticket.currentPhase,
-      ticket.ticketId,
-      result.success ? "success" : "failure",
-    );
-    logger.info(
-      `Phase "${ticket.currentPhase}" completed in ${durationMs}ms`,
-      ticket.ticketId,
-    );
+    if (result.success) {
+      log.success(`Phase "${ticket.currentPhase}" succeeded (${durationMs}ms)`);
+    } else {
+      log.error(`Phase "${ticket.currentPhase}" failed (${durationMs}ms)`);
+    }
 
     const historyEntry = {
       phase: ticket.currentPhase,
@@ -292,10 +282,8 @@ export function createRunner(config: OrchestratorConfig): Runner {
         current.status === "failed" ||
         current.status === "needs_attention"
       ) {
-        logger.info(
-          `Ticket ${current.ticketId} finished with status: ${current.status}`,
-          current.ticketId,
-        );
+        const log = logger.child({ ticketId: current.ticketId });
+        log.info(`Finished with status: ${current.status}`);
         break;
       }
 
@@ -320,7 +308,8 @@ export function createRunner(config: OrchestratorConfig): Runner {
         status: "running",
       });
 
-      logger.info(`Starting ticket ${ticketId}`, ticketId);
+      const log = logger.child({ ticketId });
+      log.info("Starting ticket");
 
       return runTicketPhases(ticket);
     },
@@ -372,10 +361,7 @@ export function createRunner(config: OrchestratorConfig): Runner {
         runTicketPhases(running)
           .catch((err) => {
             const msg = err instanceof Error ? err.message : String(err);
-            logger.error(
-              `Ticket ${ticket.ticketId} failed: ${msg}`,
-              ticket.ticketId,
-            );
+            logger.child({ ticketId: ticket.ticketId }).error(`Failed: ${msg}`);
           })
           .finally(() => {
             inFlight.delete(key);
