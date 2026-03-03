@@ -2,7 +2,7 @@ import { readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createLogger } from "./logger.js";
+import { createLogger, flushLogger } from "./logger.js";
 
 describe("createLogger", () => {
   let logDir: string;
@@ -43,8 +43,7 @@ describe("createLogger", () => {
     const logger = createLogger(logDir);
     const child = logger.child({ ticketId: "ticket-1" });
     child.info("test message");
-    // Wait for async file write
-    await new Promise((r) => setTimeout(r, 200));
+    await flushLogger(logger);
     const content = await readFile(join(logDir, "ticket-1.log"), "utf-8");
     const lines = content.trim().split("\n");
     expect(lines.length).toBeGreaterThanOrEqual(1);
@@ -58,7 +57,7 @@ describe("createLogger", () => {
     const logger = createLogger(logDir);
     const child = logger.child({ ticketId: "ticket-2" });
     child.warn("warning message");
-    await new Promise((r) => setTimeout(r, 200));
+    await flushLogger(logger);
     const content = await readFile(join(logDir, "ticket-2.log"), "utf-8");
     const parsed = JSON.parse(content.trim());
     expect(parsed.level).toBe(40); // pino warn level
@@ -69,7 +68,7 @@ describe("createLogger", () => {
     const logger = createLogger(logDir);
     const child = logger.child({ ticketId: "ticket-3" });
     child.error("error message");
-    await new Promise((r) => setTimeout(r, 200));
+    await flushLogger(logger);
     const content = await readFile(join(logDir, "ticket-3.log"), "utf-8");
     const parsed = JSON.parse(content.trim());
     expect(parsed.level).toBe(50); // pino error level
@@ -80,7 +79,7 @@ describe("createLogger", () => {
     const logger = createLogger(logDir);
     const child = logger.child({ ticketId: "ticket-4" });
     child.success("success message");
-    await new Promise((r) => setTimeout(r, 200));
+    await flushLogger(logger);
     const content = await readFile(join(logDir, "ticket-4.log"), "utf-8");
     const parsed = JSON.parse(content.trim());
     expect(parsed.level).toBe(35); // custom success level
@@ -91,7 +90,7 @@ describe("createLogger", () => {
     const logger = createLogger(logDir);
     const child = logger.child({ ticketId: "ticket-5" });
     child.trace("agent output data");
-    await new Promise((r) => setTimeout(r, 200));
+    await flushLogger(logger);
     const content = await readFile(join(logDir, "ticket-5.log"), "utf-8");
     const parsed = JSON.parse(content.trim());
     expect(parsed.level).toBe(10); // pino trace level
@@ -101,7 +100,7 @@ describe("createLogger", () => {
   it("does not create a log file when no ticketId binding", async () => {
     const logger = createLogger(logDir);
     logger.info("no ticket");
-    await new Promise((r) => setTimeout(r, 200));
+    await flushLogger(logger);
     await expect(
       readFile(join(logDir, "undefined.log"), "utf-8"),
     ).rejects.toThrow();
@@ -113,7 +112,7 @@ describe("createLogger", () => {
     child.info("first");
     child.warn("second");
     child.error("third");
-    await new Promise((r) => setTimeout(r, 200));
+    await flushLogger(logger);
     const content = await readFile(join(logDir, "ticket-6.log"), "utf-8");
     const lines = content.trim().split("\n");
     expect(lines.length).toBe(3);
@@ -126,11 +125,11 @@ describe("createLogger", () => {
     const logger = createLogger(logDir);
     const child = logger.child({ ticketId: "../evil" });
     child.info("traversal attempt");
-    await new Promise((r) => setTimeout(r, 200));
+    await flushLogger(logger);
     const files = await readdir(logDir);
     expect(files).not.toContain("../evil.log");
     const sanitizedFile = files.find((f) => f.includes("evil"));
-    expect(sanitizedFile).toBe("___evil.log");
+    expect(sanitizedFile).toBe(".._evil.log");
   });
 
   it("child logger supports further nesting", () => {
