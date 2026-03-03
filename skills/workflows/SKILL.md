@@ -246,21 +246,14 @@ The workflow is automatically discovered — no separate registration step is ne
   args: ["{{repo}}", "{{pr_number}}"]
   intervalSeconds: 120
   timeoutSeconds: 86400
-  onSuccess: handle_review
-  onFailure: escalate
+  onSuccess: await_merge
+  onFailure: handle_review
 
 - id: handle_review
   type: agent
   promptTemplate: handle-review.md
-  maxTurns: 30
-  onSuccess: push_fixes
-  onFailure: escalate
-
-- id: push_fixes
-  type: agent
-  promptTemplate: push-fixes.md
-  maxTurns: 10
-  onSuccess: await_review    # ← loops back
+  maxTurns: 20
+  onSuccess: await_review    # ← loops back after fixing + pushing
   onFailure: escalate
 ```
 

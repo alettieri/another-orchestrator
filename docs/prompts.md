@@ -60,6 +60,7 @@ Workflow phases can capture values from script output. These are stored in the t
 |----------|-------------|-------------|
 | `pr_url` | `create_pr` phase | GitHub PR URL |
 | `pr_number` | `create_pr` phase | GitHub PR number |
+| `self_review_feedback` | `self_review` phase (standard workflow) | Self-review PASS/FAIL output with issues list |
 | `review_state` | `await_review` phase (bugfix workflow) | PR review state |
 
 Context variables are workflow-specific. Custom workflows can capture and expose any values they need. Access them with `{{ variable_name }}` (they are promoted to top-level, not nested under `context.`).
@@ -109,7 +110,7 @@ Asks the agent to simplify and clean up the implementation. Focuses on removing 
 
 ### `verify.md`
 
-**Used by:** `standard` and `bugfix` workflows — `verify` and `verify_post_review` phases
+**Used by:** `bugfix` workflow — `verify` phase
 
 Asks the agent to run linting, type checking, and tests to verify correctness.
 
@@ -123,13 +124,7 @@ Asks the agent to create a GitHub PR. Uses `linearUrl` if available. The phase c
 
 **Used by:** `standard` and `bugfix` workflows — `handle_review` phase
 
-Asks the agent to address PR review feedback. Uses `{{ pr_url }}` and `{{ pr_number }}` (captured by the `create_pr` phase).
-
-### `push-fixes.md`
-
-**Used by:** `standard` and `bugfix` workflows — `push_fixes` phase
-
-Asks the agent to push review feedback fixes after handling review comments.
+Asks the agent to address PR review feedback and CI failures. Checks review comments and CI status, makes fixes, resolves review threads, runs verification checks, then commits and pushes. Uses `{{ pr_url }}` and `{{ pr_number }}` (captured by the `create_pr` phase).
 
 ### `interactive-system.md`
 

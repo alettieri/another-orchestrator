@@ -122,8 +122,7 @@ capture:
 | `simplify.md` | Simplify phase | Code cleanup, no behavior changes |
 | `verify.md` | Verify phases | Run lint, typecheck, tests; fix failures |
 | `create-pr.md` | Create PR phase | Push branch, create PR via `gh` |
-| `handle-review.md` | Handle review phase | Address reviewer comments |
-| `push-fixes.md` | Push fixes phase | Commit and push review fixes |
+| `handle-review.md` | Handle review phase | Address reviewer comments, commit and push fixes |
 
 ## Adding a Custom Workflow
 

@@ -1,5 +1,5 @@
 name: standard
-description: "Standard workflow: setup, implement, review, simplify, verify, create PR, review cycle, merge, cleanup"
+description: "Standard workflow: setup, implement, self-review, simplify, create PR, review cycle, merge, cleanup"
 tags: [standard, agent]
 
 phases:
@@ -31,6 +31,8 @@ phases:
       - Grep
       - Bash
     maxTurns: 15
+    capture:
+      self_review_feedback: stdout
     onSuccess: simplify
     onFailure: implement
 
@@ -38,16 +40,8 @@ phases:
     type: agent
     promptTemplate: simplify.md
     maxTurns: 20
-    onSuccess: verify
-    onFailure: verify
-
-  - id: verify
-    type: agent
-    promptTemplate: verify.md
-    maxTurns: 15
-    maxRetries: 1
     onSuccess: create_pr
-    onFailure: implement
+    onFailure: create_pr
 
   - id: create_pr
     type: agent
@@ -74,20 +68,6 @@ phases:
     type: agent
     promptTemplate: handle-review.md
     maxTurns: 20
-    onSuccess: verify_post_review
-    onFailure: escalate
-
-  - id: verify_post_review
-    type: agent
-    promptTemplate: verify.md
-    maxTurns: 15
-    onSuccess: push_fixes
-    onFailure: handle_review
-
-  - id: push_fixes
-    type: agent
-    promptTemplate: push-fixes.md
-    maxTurns: 5
     onSuccess: await_review
     onFailure: escalate
 

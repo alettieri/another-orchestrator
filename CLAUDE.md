@@ -30,9 +30,9 @@ Use this table to find the right reference material for your area of change:
 | Workflow execution engine | `src/core/runner.ts` |
 | Agent spawning/invocation | `src/agents/invoke.ts` |
 | CLI commands | `src/cli.ts` |
-| YAML workflow definitions | `workflows/README.md`, `skills/workflows/SKILL.md` |
+| YAML workflow definitions | `docs/workflows.md`, `skills/workflows/SKILL.md` |
 | Plan/ticket JSON schemas | `skills/planner/SKILL.md` |
-| Prompt templates | `prompts/README.md` |
+| Prompt templates | `docs/prompts.md` |
 | Shell scripts | `scripts/` directory |
 | Configuration | `src/core/config.ts`, `skills/config/SKILL.md` |
 | Full architecture | `mvp.md` |
@@ -117,7 +117,6 @@ workflows/
   standard.yaml               # Default feature workflow
   bugfix.yaml                 # Bug fix workflow
   minimal.yaml                # Single-phase testing workflow
-  README.md                   # Workflow authoring reference
 
 prompts/                      # Nunjucks templates for agent phases
   interactive-system.md       # System prompt for PI interactive sessions
@@ -128,7 +127,6 @@ prompts/                      # Nunjucks templates for agent phases
   verify.md
   create-pr.md
   handle-review.md
-  push-fixes.md
 
 scripts/                      # Bash scripts for infrastructure phases
   setup-worktree.sh
@@ -143,6 +141,10 @@ skills/                       # Agent Skills (progressive disclosure docs)
   providers/
     linear/SKILL.md           # Linear integration
     github-issues/SKILL.md    # GitHub Issues integration
+
+docs/                         # Reference documentation
+  workflows.md                # Workflow authoring reference
+  prompts.md                  # Prompt templates, variables, and customization
 
 ~/.orchestrator/              # User data (external, created by `orchestrator init`)
   config.yaml                 # User configuration
@@ -171,7 +173,7 @@ For detailed reference on specific topics:
 
 - **Plan/ticket schemas**: `skills/planner/SKILL.md` -- JSON schemas, field reference, examples, naming conventions
 - **Workflow authoring**: `skills/workflows/SKILL.md` -- phase types, template variables, capture rules, authoring guide
-- **Workflow reference**: `workflows/README.md` -- available workflows, phase type tables, scripts, prompt templates
+- **Workflow reference**: `docs/workflows.md` -- available workflows, phase type tables, scripts, prompt templates
 - **Configuration**: `skills/config/SKILL.md` -- config file format, env vars, common modifications
-- **Prompt templates**: `prompts/README.md` -- all templates, available variables, custom prompt setup
+- **Prompt templates**: `docs/prompts.md` -- all templates, available variables, custom prompt setup
 - **Full architecture**: `mvp.md` -- complete product requirements document

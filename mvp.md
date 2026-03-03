@@ -232,7 +232,7 @@ A `workflows/registry.yaml` file lists all available workflows with descriptions
   tags: [bug, hotfix]
 ```
 
-Users define custom workflows by creating a YAML file in `workflows/` and adding an entry to the registry. The planner skill includes instructions for authoring workflows, and a `workflows/README.md` documents the full phase type reference.
+Users define custom workflows by creating a YAML file in `workflows/` and adding an entry to the registry. The planner skill includes instructions for authoring workflows, and `docs/workflows.md` documents the full phase type reference.
 
 ### Phase Types
 
@@ -395,7 +395,7 @@ The orchestrator repo has its own CLAUDE.md with progressive disclosure, serving
 1. **Coding agents working on the orchestrator itself** — When you point Claude Code at the orchestrator repo and ask it to add a feature, it needs to understand the architecture, conventions, and where things live.
 2. **The LLM planner** — When the planner agent runs inside the orchestrator repo, the CLAUDE.md orients it and points to the relevant skills.
 
-The CLAUDE.md provides the high-level overview and then references deeper docs: `workflows/README.md` for the workflow authoring reference, `skills/planner/SKILL.md` for how to create plans, and `skills/providers/` for tool-specific ticket fetching.
+The CLAUDE.md provides the high-level overview and then references deeper docs: `docs/workflows.md` for the workflow authoring reference, `skills/planner/SKILL.md` for how to create plans, and `skills/providers/` for tool-specific ticket fetching.
 
 ### Agent Skills
 

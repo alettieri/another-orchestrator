@@ -12,12 +12,11 @@ Repository: `{{ repo }}`
 
 ## Instructions
 
-Run the project's verification checks and fix any failures:
+Confirm that all checks pass. Run each in order and fix any failures:
 
 1. Run the linter and fix all lint errors.
 2. Run the type checker and fix all type errors.
 3. Run the full test suite and fix any failing tests.
-4. If any check fails, make the necessary corrections and re-run until all checks pass.
-5. Do not commit your changes — the orchestrator will handle that.
+4. Do not commit your changes — the orchestrator will handle that.
 
 All three checks (lint, typecheck, tests) must pass before this phase is complete.

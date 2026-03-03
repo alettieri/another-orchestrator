@@ -22,6 +22,14 @@ Repository: `{{ repo }}`
 Linear issue: {{ linearUrl }}
 {% endif %}
 
+{% if context.self_review_feedback %}
+## Self-Review Feedback
+
+A previous self-review found the following issues. Address these:
+
+{{ context.self_review_feedback }}
+{% endif %}
+
 ## Instructions
 
 1. Read and understand the ticket requirements above.

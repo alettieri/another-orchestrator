@@ -147,7 +147,6 @@ workflows/                    # YAML workflow definitions
   standard.yaml               # Default feature workflow
   bugfix.yaml                 # Bug fix workflow
   minimal.yaml                # Single-phase testing workflow
-  README.md                   # Workflow authoring reference
 
 prompts/                      # Nunjucks templates for agent phases
   interactive-system.md       # System prompt for PI interactive sessions
@@ -159,6 +158,10 @@ skills/                       # Agent Skills documentation
   providers/
     linear/SKILL.md           # Linear integration
     github-issues/SKILL.md    # GitHub Issues integration
+
+docs/                         # Reference documentation
+  workflows.md                # Workflow authoring reference
+  prompts.md                  # Prompt templates, variables, and customization
 ```
 
 ## Configuration
@@ -211,7 +214,7 @@ Directory fields (`stateDir`, `logDir`, `workflowDir`, `promptDir`, `scriptDir`,
 
 ### Custom Prompt Templates
 
-Drop files into `~/.orchestrator/prompts/` to override individual agent prompts — no config change needed. Only the templates you provide are overridden; all others fall back to bundled defaults. See `prompts/README.md` for the full list of templates and available template variables.
+Drop files into `~/.orchestrator/prompts/` to override individual agent prompts — no config change needed. Only the templates you provide are overridden; all others fall back to bundled defaults. See `docs/prompts.md` for the full list of templates and available template variables.
 
 ## Modifying the Code
 
@@ -240,8 +243,8 @@ All three must pass before considering work complete.
 ### Further Reading
 
 - `mvp.md` -- full product requirements document
-- `workflows/README.md` -- workflow authoring reference
-- `prompts/README.md` -- prompt templates, variables, and customization
+- `docs/workflows.md` -- workflow authoring reference
+- `docs/prompts.md` -- prompt templates, variables, and customization
 - `skills/config/SKILL.md` -- configuration reference
 - `skills/planner/SKILL.md` -- plan/ticket JSON schemas
 - `skills/workflows/SKILL.md` -- workflow authoring guide

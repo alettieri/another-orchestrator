@@ -66,20 +66,6 @@ phases:
     type: agent
     promptTemplate: handle-review.md
     maxTurns: 20
-    onSuccess: verify_post_review
-    onFailure: escalate
-
-  - id: verify_post_review
-    type: agent
-    promptTemplate: verify.md
-    maxTurns: 15
-    onSuccess: push_fixes
-    onFailure: handle_review
-
-  - id: push_fixes
-    type: agent
-    promptTemplate: push-fixes.md
-    maxTurns: 5
     onSuccess: await_review
     onFailure: escalate
 
