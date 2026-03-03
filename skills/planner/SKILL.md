@@ -437,7 +437,7 @@ Options:
 
 ### Step 3: Handle the response
 
-- **User confirms** — Write `plan.json` and all ticket files to `<stateDir>/plans/<planId>/`. Then run through the checklist below.
+- **User confirms** — Write `plan.json` to `<stateDir>/plans/<planId>/` and all ticket files to `<stateDir>/plans/<planId>/tickets/`. Then run through the checklist below.
 - **User wants changes** — Ask what they want to change. Update the draft in conversation, present the revised JSON, and ask for confirmation again. Repeat until the user confirms.
 
 ### Why this matters
