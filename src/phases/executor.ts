@@ -25,6 +25,7 @@ export interface PhaseExecutor {
     phase: PhaseDefinition,
     ticket: TicketState,
     planAgent: string | null,
+    options?: { signal?: AbortSignal },
   ): Promise<PhaseResult>;
 }
 
@@ -42,6 +43,7 @@ export function createPhaseExecutor(
     phase: PhaseDefinition,
     ticket: TicketState,
     log: Logger,
+    signal?: AbortSignal,
   ): Promise<{ success: boolean; output: string }> {
     if (!phase.command) {
       return { success: false, output: "Script phase missing command" };
@@ -57,6 +59,7 @@ export function createPhaseExecutor(
     const result = await execCommand("/bin/bash", [scriptPath, ...args], {
       cwd: resolveCwd(ticket),
       timeoutMs: phase.timeoutSeconds ? phase.timeoutSeconds * 1000 : undefined,
+      signal,
     });
 
     if (result.stderr) {
@@ -117,6 +120,7 @@ export function createPhaseExecutor(
     ticket: TicketState,
     planAgent: string | null,
     log: Logger,
+    signal?: AbortSignal,
   ): Promise<PhaseResult> {
     if (!phase.promptTemplate) {
       return {
@@ -149,6 +153,7 @@ export function createPhaseExecutor(
       {
         onOutput: (chunk) => log.trace(chunk),
       },
+      { signal },
     );
 
     const captured = await captureValues(phase, agentResult.stdout, ticket);
@@ -166,6 +171,7 @@ export function createPhaseExecutor(
     phase: PhaseDefinition,
     ticket: TicketState,
     log: Logger,
+    signal?: AbortSignal,
   ): Promise<PhaseResult> {
     if (!phase.command) {
       return {
@@ -185,6 +191,7 @@ export function createPhaseExecutor(
 
     const result = await execCommand("/bin/bash", [scriptPath, ...args], {
       cwd: resolveCwd(ticket),
+      signal,
     });
 
     if (result.exitCode === 0) {
@@ -220,8 +227,9 @@ export function createPhaseExecutor(
     phase: PhaseDefinition,
     ticket: TicketState,
     log: Logger,
+    signal?: AbortSignal,
   ): Promise<PhaseResult> {
-    const { success, output } = await runScript(phase, ticket, log);
+    const { success, output } = await runScript(phase, ticket, log, signal);
     const captured = await captureValues(phase, output, ticket);
     const nextPhase = getNextPhase(phase, success);
 
@@ -229,17 +237,18 @@ export function createPhaseExecutor(
   }
 
   return {
-    async execute(phase, ticket, _planAgent) {
+    async execute(phase, ticket, _planAgent, options) {
       const log = logger.child({ ticketId: ticket.ticketId });
+      const signal = options?.signal;
       switch (phase.type) {
         case PhaseTypeSchema.enum.terminal:
           return executeTerminalPhase(phase);
         case PhaseTypeSchema.enum.agent:
-          return executeAgentPhase(phase, ticket, _planAgent, log);
+          return executeAgentPhase(phase, ticket, _planAgent, log, signal);
         case PhaseTypeSchema.enum.poll:
-          return executePollPhase(phase, ticket, log);
+          return executePollPhase(phase, ticket, log, signal);
         case PhaseTypeSchema.enum.script:
-          return executeScriptPhase(phase, ticket, log);
+          return executeScriptPhase(phase, ticket, log, signal);
         default: {
           const _exhaustive: never = phase.type;
           throw new Error(`Unknown phase type: ${_exhaustive}`);

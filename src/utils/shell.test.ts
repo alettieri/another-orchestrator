@@ -112,5 +112,34 @@ describe("shell", () => {
       expect(stdoutChunks.join("").trim()).toBe("out");
       expect(stderrChunks.join("").trim()).toBe("err");
     });
+
+    it("kills child process when AbortSignal is fired", async () => {
+      const controller = new AbortController();
+
+      // Start a long-running process
+      const promise = execCommandStreaming("sleep", ["10"], {
+        signal: controller.signal,
+      });
+
+      // Abort after a short delay
+      setTimeout(() => controller.abort(), 100);
+
+      const result = await promise;
+      expect(result.exitCode).toBe(130);
+    });
+
+    it("resolves immediately when AbortSignal is already aborted", async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      const start = Date.now();
+      const result = await execCommandStreaming("sleep", ["10"], {
+        signal: controller.signal,
+      });
+      const elapsed = Date.now() - start;
+
+      expect(result.exitCode).toBe(130);
+      expect(elapsed).toBeLessThan(2000);
+    });
   });
 });

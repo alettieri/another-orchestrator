@@ -649,6 +649,77 @@ phases:
     });
   });
 
+  describe("pause aborts in-flight agents", () => {
+    it("pausing a ticket on disk during execution stops the agent", async () => {
+      // Use a long-running script so we can pause mid-execution
+      await writeFile(
+        join(scriptDir, "run.sh"),
+        "#!/usr/bin/env bash\nsleep 30 && echo ok",
+        { mode: 0o755 },
+      );
+
+      const plan = makePlan();
+      const ticket = makeTicket({ status: "ready" });
+      await savePlan(plan);
+      await saveTicket(ticket);
+
+      const runner = createRunner({ ...config, pollInterval: 0.1 });
+
+      // Dispatch via tick
+      await runner.tick();
+
+      // Give fire-and-forget a moment to start
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Verify ticket is running
+      const running = await readTicket("test-plan", "TICKET-1");
+      expect(running.status).toBe("running");
+
+      // Pause the ticket on disk
+      await saveTicket({ ...running, status: "paused" });
+
+      // Next tick should detect the pause and abort the in-flight agent
+      await runner.tick();
+
+      // Give time for the abort to propagate and status to be written
+      await new Promise((r) => setTimeout(r, 500));
+
+      const final = await readTicket("test-plan", "TICKET-1");
+      expect(final.status).toBe("paused");
+    });
+
+    it("pausing a plan on disk during execution stops its tickets", async () => {
+      await writeFile(
+        join(scriptDir, "run.sh"),
+        "#!/usr/bin/env bash\nsleep 30 && echo ok",
+        { mode: 0o755 },
+      );
+
+      const plan = makePlan();
+      const ticket = makeTicket({ status: "ready" });
+      await savePlan(plan);
+      await saveTicket(ticket);
+
+      const runner = createRunner({ ...config, pollInterval: 0.1 });
+
+      // Dispatch via tick
+      await runner.tick();
+
+      await new Promise((r) => setTimeout(r, 100));
+
+      // Pause the plan on disk
+      await savePlan({ ...plan, status: "paused" });
+
+      // Next tick should detect the pause and abort the in-flight agent
+      await runner.tick();
+
+      await new Promise((r) => setTimeout(r, 500));
+
+      const final = await readTicket("test-plan", "TICKET-1");
+      expect(final.status).toBe("paused");
+    });
+  });
+
   describe("resolveTicketRepo", () => {
     it("returns ticket unchanged when ticket has a repo", () => {
       const ticket = makeTicket({ repo: "/repos/backend" });

@@ -51,12 +51,19 @@ export function createRunner(config: OrchestratorConfig): Runner {
   const logger = createLogger(config.logDir);
   const phaseExecutor = createPhaseExecutor(config, templateRenderer, logger);
 
-  const inFlight = new Set<string>();
+  interface InFlightEntry {
+    planId: string;
+    ticketId: string;
+    controller: AbortController;
+  }
+  const inFlight = new Map<string, InFlightEntry>();
 
   async function executeTicketPhase(
     ticket: TicketState,
+    signal?: AbortSignal,
   ): Promise<{ ticket: TicketState; pendingPoll: boolean }> {
     const log = logger.child({ ticketId: ticket.ticketId });
+
     const plan = await stateManager.getPlan(ticket.planId);
     const planAgent = plan?.agent ?? null;
 
@@ -90,7 +97,14 @@ export function createRunner(config: OrchestratorConfig): Runner {
 
     let result: PhaseResult;
     try {
-      result = await phaseExecutor.execute(phase, resolved, planAgent);
+      result = await phaseExecutor.execute(phase, resolved, planAgent, {
+        signal,
+      });
+
+      // If aborted mid-phase, skip result processing
+      if (signal?.aborted) {
+        return { ticket, pendingPoll: false };
+      }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       log.error(`Phase "${ticket.currentPhase}" failed: ${errorMsg}`);
@@ -274,12 +288,45 @@ export function createRunner(config: OrchestratorConfig): Runner {
     return { ticket: updated, pendingPoll: false };
   }
 
-  async function runTicketPhases(ticket: TicketState): Promise<TicketState> {
+  async function markPausedIfNeeded(
+    current: TicketState,
+    signal?: AbortSignal,
+  ): Promise<TicketState | null> {
+    if (current.status === "paused") return current;
+
+    // Only running or ready tickets can be paused — don't overwrite terminal states
+    if (current.status !== "running" && current.status !== "ready") return null;
+
+    const shouldPause =
+      signal?.aborted ||
+      (await stateManager.getTicket(current.planId, current.ticketId))
+        ?.status === "paused" ||
+      (await stateManager.getPlan(current.planId))?.status === "paused";
+
+    if (shouldPause) {
+      return await stateManager.updateTicket(current.planId, current.ticketId, {
+        status: "paused",
+      });
+    }
+
+    return null;
+  }
+
+  async function runTicketPhases(
+    ticket: TicketState,
+    signal?: AbortSignal,
+  ): Promise<TicketState> {
     let current = ticket;
 
     while (true) {
-      const { ticket: updated, pendingPoll } =
-        await executeTicketPhase(current);
+      // Single pause checkpoint before each phase
+      const paused = await markPausedIfNeeded(current, signal);
+      if (paused) return paused;
+
+      const { ticket: updated, pendingPoll } = await executeTicketPhase(
+        current,
+        signal,
+      );
 
       // Re-read from disk for consistency
       const fromDisk = await stateManager.getTicket(
@@ -293,10 +340,15 @@ export function createRunner(config: OrchestratorConfig): Runner {
       }
       current = fromDisk;
 
+      // Post-phase pause check (signal may have fired during execution)
+      const pausedAfter = await markPausedIfNeeded(current, signal);
+      if (pausedAfter) return pausedAfter;
+
       // Check if we reached a terminal or yielding state
       if (
         current.status === "complete" ||
         current.status === "failed" ||
+        current.status === "paused" ||
         current.status === "needs_attention"
       ) {
         const log = logger.child({ ticketId: current.ticketId });
@@ -328,7 +380,15 @@ export function createRunner(config: OrchestratorConfig): Runner {
       const log = logger.child({ ticketId });
       log.info("Starting ticket");
 
-      return runTicketPhases(ticket);
+      const key = `${planId}/${ticketId}`;
+      const controller = new AbortController();
+      inFlight.set(key, { planId, ticketId, controller });
+
+      try {
+        return await runTicketPhases(ticket, controller.signal);
+      } finally {
+        inFlight.delete(key);
+      }
     },
 
     async tick() {
@@ -340,13 +400,27 @@ export function createRunner(config: OrchestratorConfig): Runner {
         await stateManager.resolveDependencies(plan.id);
       }
 
-      // 2. Get current running count
+      // 2. Abort in-flight tickets whose on-disk status is now paused
+      for (const [, entry] of inFlight) {
+        const { planId, ticketId, controller } = entry;
+        const freshTicket = await stateManager.getTicket(planId, ticketId);
+        if (!freshTicket) continue;
+        const paused = await markPausedIfNeeded(freshTicket);
+        if (paused) {
+          logger
+            .child({ ticketId })
+            .info("Aborting in-flight ticket (paused on disk)");
+          controller.abort();
+        }
+      }
+
+      // 3. Get current running count
       const runningCount = await stateManager.getRunningCount();
 
-      // 3. Get ready tickets
+      // 4. Get ready tickets
       const readyTickets = await stateManager.getReadyTickets();
 
-      // 4. Filter out tickets already in-flight or waiting on poll interval
+      // 5. Filter out tickets already in-flight or waiting on poll interval
       const now = Date.now();
       const dispatchable = readyTickets.filter((t) => {
         if (inFlight.has(`${t.planId}/${t.ticketId}`)) return false;
@@ -359,13 +433,18 @@ export function createRunner(config: OrchestratorConfig): Runner {
         return true;
       });
 
-      // 5. Dispatch up to available concurrency slots
+      // 6. Dispatch up to available concurrency slots
       const available = config.maxConcurrency - runningCount - inFlight.size;
       const toDispatch = dispatchable.slice(0, Math.max(0, available));
 
       for (const ticket of toDispatch) {
         const key = `${ticket.planId}/${ticket.ticketId}`;
-        inFlight.add(key);
+        const controller = new AbortController();
+        inFlight.set(key, {
+          planId: ticket.planId,
+          ticketId: ticket.ticketId,
+          controller,
+        });
 
         // Set status to running
         const running = await stateManager.updateTicket(
@@ -375,7 +454,7 @@ export function createRunner(config: OrchestratorConfig): Runner {
         );
 
         // Fire-and-forget
-        runTicketPhases(running)
+        runTicketPhases(running, controller.signal)
           .catch((err) => {
             const msg = err instanceof Error ? err.message : String(err);
             logger.child({ ticketId: ticket.ticketId }).error(`Failed: ${msg}`);
@@ -385,7 +464,7 @@ export function createRunner(config: OrchestratorConfig): Runner {
           });
       }
 
-      // 6. Log tick summary
+      // 7. Log tick summary
       logger.info(
         `Tick: dispatched=${toDispatch.length} running=${runningCount} ready=${readyTickets.length} inFlight=${inFlight.size}`,
       );

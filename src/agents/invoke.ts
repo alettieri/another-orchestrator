@@ -53,6 +53,7 @@ export async function invokeAgent(
   agentConfig: AgentConfig,
   invocation: AgentInvocation,
   callbacks?: AgentCallbacks,
+  options?: { signal?: AbortSignal },
 ): Promise<AgentResult> {
   const { command, args } = buildAgentArgs(agentConfig, invocation);
 
@@ -60,6 +61,7 @@ export async function invokeAgent(
     cwd: invocation.cwd || undefined,
     timeoutMs: DEFAULT_TIMEOUT_MS,
     onStdout: callbacks?.onOutput,
+    signal: options?.signal,
   });
 
   return {
