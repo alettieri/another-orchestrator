@@ -73,14 +73,36 @@ export async function loadConfig(
     return defaultPath;
   }
 
+  const bundledWorkflowDir = join(pkgDir, "workflows");
+  const homeWorkflowDir = join(home, "workflows");
+  const workflowDir = rawConfig.workflowDir
+    ? resolveDir(rawConfig.workflowDir, bundledWorkflowDir)
+    : homeWorkflowDir;
+  const workflowSearchPath =
+    workflowDir !== bundledWorkflowDir
+      ? [workflowDir, bundledWorkflowDir]
+      : [bundledWorkflowDir];
+
+  const bundledPromptDir = join(pkgDir, "prompts");
+  const homePromptDir = join(home, "prompts");
+  const promptDir = rawConfig.promptDir
+    ? resolveDir(rawConfig.promptDir, bundledPromptDir)
+    : homePromptDir;
+  const promptSearchPath =
+    promptDir !== bundledPromptDir
+      ? [promptDir, bundledPromptDir]
+      : [bundledPromptDir];
+
   const resolved: OrchestratorConfig = {
     ...rawConfig,
     // User data dirs default to ~/.orchestrator/<name>
     stateDir: resolveDir(rawConfig.stateDir, join(home, "state")),
     logDir: resolveDir(rawConfig.logDir, join(home, "logs")),
     // Bundled dirs default to <packageDir>/<name>
-    workflowDir: resolveDir(rawConfig.workflowDir, join(pkgDir, "workflows")),
-    promptDir: resolveDir(rawConfig.promptDir, join(pkgDir, "prompts")),
+    workflowDir,
+    workflowSearchPath,
+    promptDir,
+    promptSearchPath,
     scriptDir: resolveDir(rawConfig.scriptDir, join(pkgDir, "scripts")),
     skillsDir: resolveDir(rawConfig.skillsDir, join(pkgDir, "skills")),
   };

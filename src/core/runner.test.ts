@@ -14,14 +14,6 @@ describe("runner", () => {
   let logDir: string;
   let config: OrchestratorConfig;
 
-  const registryYaml = `
-workflows:
-  - name: minimal
-    file: minimal.yaml
-    description: "Minimal workflow"
-    tags: [test]
-`;
-
   const minimalYaml = `
 name: minimal
 description: "Test workflow"
@@ -120,7 +112,6 @@ phases:
     await mkdir(promptDir, { recursive: true });
     await mkdir(logDir, { recursive: true });
 
-    await writeFile(join(workflowDir, "registry.yaml"), registryYaml);
     await writeFile(join(workflowDir, "minimal.yaml"), minimalYaml);
 
     config = {
@@ -131,7 +122,9 @@ phases:
       stateDir,
       logDir,
       workflowDir,
+      workflowSearchPath: [workflowDir],
       promptDir,
+      promptSearchPath: [promptDir],
       scriptDir,
       skillsDir: join(tmpDir, "skills"),
       pollInterval: 10,
@@ -234,7 +227,6 @@ phases:
       mode: 0o755,
     });
 
-    // Use a workflow that retries itself
     const retryWorkflowYaml = `
 name: retry-workflow
 description: "Workflow that retries"
@@ -248,14 +240,6 @@ phases:
   - id: complete
     type: terminal
 `;
-    const retryRegistryYaml = `
-workflows:
-  - name: retry-workflow
-    file: retry.yaml
-    description: "Retry workflow"
-    tags: [test]
-`;
-    await writeFile(join(workflowDir, "registry.yaml"), retryRegistryYaml);
     await writeFile(join(workflowDir, "retry.yaml"), retryWorkflowYaml);
 
     const plan = makePlan({ workflow: "retry-workflow" });
@@ -429,21 +413,12 @@ phases:
     notify: true
 `;
 
-    const pollRegistryYaml = `
-workflows:
-  - name: poll-workflow
-    file: poll.yaml
-    description: "Poll workflow"
-    tags: [test]
-`;
-
     it("sets ticket to ready without incrementing retries when poll is pending", async () => {
       await writeFile(
         join(scriptDir, "check.sh"),
         "#!/usr/bin/env bash\nexit 1",
         { mode: 0o755 },
       );
-      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
       await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
 
       const plan = makePlan({ workflow: "poll-workflow" });
@@ -468,7 +443,6 @@ workflows:
         "#!/usr/bin/env bash\nexit 1",
         { mode: 0o755 },
       );
-      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
       await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
 
       const plan = makePlan({ workflow: "poll-workflow" });
@@ -495,7 +469,6 @@ workflows:
         '#!/usr/bin/env bash\necho "done"\nexit 0',
         { mode: 0o755 },
       );
-      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
       await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
 
       const plan = makePlan({ workflow: "poll-workflow" });
@@ -537,14 +510,6 @@ phases:
     type: terminal
     notify: true
 `;
-      const shortTimeoutRegistry = `
-workflows:
-  - name: poll-timeout
-    file: poll-timeout.yaml
-    description: "Poll timeout workflow"
-    tags: [test]
-`;
-      await writeFile(join(workflowDir, "registry.yaml"), shortTimeoutRegistry);
       await writeFile(join(workflowDir, "poll-timeout.yaml"), shortTimeoutYaml);
 
       const plan = makePlan({ workflow: "poll-timeout" });
@@ -571,7 +536,6 @@ workflows:
         '#!/usr/bin/env bash\necho "done"\nexit 0',
         { mode: 0o755 },
       );
-      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
       await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
 
       const plan = makePlan({ workflow: "poll-workflow" });
@@ -597,7 +561,6 @@ workflows:
         "#!/usr/bin/env bash\nexit 1",
         { mode: 0o755 },
       );
-      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
       await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
 
       const plan = makePlan({ workflow: "poll-workflow" });
@@ -625,7 +588,6 @@ workflows:
         "#!/usr/bin/env bash\nexit 1",
         { mode: 0o755 },
       );
-      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
       await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
 
       const plan = makePlan({ workflow: "poll-workflow" });
@@ -660,7 +622,6 @@ workflows:
         '#!/usr/bin/env bash\necho "done"\nexit 0',
         { mode: 0o755 },
       );
-      await writeFile(join(workflowDir, "registry.yaml"), pollRegistryYaml);
       await writeFile(join(workflowDir, "poll.yaml"), pollWorkflowYaml);
 
       const plan = makePlan({ workflow: "poll-workflow" });
@@ -703,14 +664,6 @@ phases:
   - id: abort
     type: terminal
 `;
-    const agentRegistryYaml = `
-workflows:
-  - name: agent-workflow
-    file: agent.yaml
-    description: "Agent workflow"
-    tags: [test]
-`;
-    await writeFile(join(workflowDir, "registry.yaml"), agentRegistryYaml);
     await writeFile(join(workflowDir, "agent.yaml"), agentWorkflowYaml);
 
     const plan = makePlan({ workflow: "agent-workflow" });

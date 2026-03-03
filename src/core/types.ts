@@ -42,7 +42,9 @@ export const OrchestratorConfigSchema = z.object({
   stateDir: z.string(),
   logDir: z.string(),
   workflowDir: z.string(),
+  workflowSearchPath: z.array(z.string()),
   promptDir: z.string(),
+  promptSearchPath: z.array(z.string()),
   scriptDir: z.string(),
   skillsDir: z.string(),
   pollInterval: z.number().default(10),
@@ -157,6 +159,7 @@ export type PhaseDefinition = z.infer<typeof PhaseDefinitionSchema>;
 export const WorkflowDefinitionSchema = z.object({
   name: z.string(),
   description: z.string().optional().default(""),
+  tags: z.array(z.string()).default([]),
   phases: z.array(PhaseDefinitionSchema),
 });
 
@@ -164,7 +167,6 @@ export type WorkflowDefinition = z.infer<typeof WorkflowDefinitionSchema>;
 
 export const WorkflowRegistryEntrySchema = z.object({
   name: z.string(),
-  file: z.string(),
   description: z.string(),
   tags: z.array(z.string()).default([]),
 });

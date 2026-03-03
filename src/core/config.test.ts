@@ -138,6 +138,18 @@ describe("loadConfig", () => {
     expect(config.skillsDir).toBe(join(tmpDir, "skills"));
   });
 
+  it("builds promptSearchPath with custom dir first and bundled fallback", async () => {
+    const configPath = join(tmpDir, "orchestrator.yaml");
+    await writeFile(configPath, fullYaml);
+
+    const config = await loadConfig({ configPath, packageDir: pkgDir });
+    // Custom dir is ./prompts resolved to tmpDir/prompts, bundled is pkgDir/prompts
+    expect(config.promptSearchPath).toEqual([
+      join(tmpDir, "prompts"),
+      join(pkgDir, "prompts"),
+    ]);
+  });
+
   it("applies smart defaults when dirs are omitted", async () => {
     process.env.ORCHESTRATOR_HOME = join(tmpDir, "home");
     await mkdir(join(tmpDir, "home"), { recursive: true });
@@ -153,9 +165,17 @@ describe("loadConfig", () => {
 
     // Bundled dirs default to packageDir
     expect(config.workflowDir).toBe(join(pkgDir, "workflows"));
-    expect(config.promptDir).toBe(join(pkgDir, "prompts"));
     expect(config.scriptDir).toBe(join(pkgDir, "scripts"));
     expect(config.skillsDir).toBe(join(pkgDir, "skills"));
+
+    // promptDir defaults to ~/.orchestrator/prompts/ (convention-based)
+    expect(config.promptDir).toBe(join(tmpDir, "home", "prompts"));
+
+    // Search path: home prompts first, bundled fallback
+    expect(config.promptSearchPath).toEqual([
+      join(tmpDir, "home", "prompts"),
+      join(pkgDir, "prompts"),
+    ]);
   });
 
   it("throws on invalid YAML", async () => {
@@ -197,6 +217,7 @@ describe("resolveAgent", () => {
     logDir: "/tmp/logs",
     workflowDir: "/tmp/workflows",
     promptDir: "/tmp/prompts",
+    promptSearchPath: ["/tmp/prompts"],
     scriptDir: "/tmp/scripts",
     skillsDir: "/tmp/skills",
     pollInterval: 10,

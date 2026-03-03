@@ -116,7 +116,7 @@ Where YAML workflow definitions live. Default: bundled `workflows/` from the ins
 
 ### `promptDir` (string, optional)
 
-Where Nunjucks prompt templates live. Default: bundled `prompts/` from the installed package.
+Override for custom Nunjucks prompt templates directory. By default, `~/.orchestrator/prompts/` is automatically checked for custom templates (no config needed). Templates found there take priority over the bundled defaults. Set `promptDir` only if you want a different location. See `prompts/README.md` for available templates and variables.
 
 ### `scriptDir` (string, optional)
 
@@ -189,14 +189,30 @@ mcpServers:
 
 ### Overriding Bundled Directories
 
-If you have custom workflows, prompts, or scripts outside the package:
+If you have custom workflows or scripts outside the package:
 
 ```yaml
 workflowDir: /path/to/my/workflows
-promptDir: /path/to/my/prompts
 ```
 
 Paths are resolved relative to the config file location. Absolute paths also work.
+
+### Customizing Prompt Templates
+
+Drop custom templates into `~/.orchestrator/prompts/` — they're picked up automatically. Only override the templates you want to change; all others fall back to bundled defaults.
+
+```sh
+mkdir -p ~/.orchestrator/prompts
+# Copy and edit the template you want to customize
+```
+
+To use a different directory, set `promptDir` in config:
+
+```yaml
+promptDir: ~/my-prompts
+```
+
+See `prompts/README.md` for the full list of templates and available template variables.
 
 ## How to Modify the Config
 
