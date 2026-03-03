@@ -1,6 +1,8 @@
 import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Writable } from "node:stream";
+import pretty from "pino-pretty";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createLogger } from "./logger.js";
 
@@ -104,5 +106,38 @@ describe("createLogger", () => {
     const grandchild = child.child({ phase: "build" });
     expect(typeof grandchild.info).toBe("function");
     grandchild.info("nested log");
+  });
+
+  it("pretty-printed timestamp shows correct minutes, not month", async () => {
+    const chunks: string[] = [];
+    const sink = new Writable({
+      write(chunk, _encoding, callback) {
+        chunks.push(chunk.toString());
+        callback();
+      },
+    });
+
+    const prettyStream = pretty({
+      colorize: false,
+      ignore: "pid,hostname",
+      translateTime: "SYS:HH:MM:ss",
+      destination: sink,
+    });
+
+    const now = new Date();
+    const expectedMinutes = String(now.getMinutes()).padStart(2, "0");
+
+    prettyStream.write(
+      `${JSON.stringify({ level: 30, time: Date.now(), msg: "ts-check" })}\n`,
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const output = chunks.join("");
+    const timestampMatch = output.match(/(\d{2}):(\d{2}):(\d{2})/);
+    expect(timestampMatch).toBeTruthy();
+
+    const [, , minutesInOutput] = timestampMatch as RegExpMatchArray;
+    expect(minutesInOutput).toBe(expectedMinutes);
   });
 });

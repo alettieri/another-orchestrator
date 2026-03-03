@@ -11,7 +11,7 @@ export function createLogger(logDir: string): Logger {
   const prettyStream = pretty({
     colorize: true,
     ignore: "pid,hostname,ticketId",
-    translateTime: "SYS:HH:mm:ss",
+    translateTime: "SYS:HH:MM:ss",
     customLevels: "success:35",
     customColors: "success:green",
     messageFormat: (log: Record<string, unknown>, messageKey: string) => {
