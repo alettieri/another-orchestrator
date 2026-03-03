@@ -1,4 +1,4 @@
-import { readFile, rm } from "node:fs/promises";
+import { readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -120,6 +120,17 @@ describe("createLogger", () => {
     expect(JSON.parse(lines[0]).msg).toBe("first");
     expect(JSON.parse(lines[1]).msg).toBe("second");
     expect(JSON.parse(lines[2]).msg).toBe("third");
+  });
+
+  it("sanitizes ticketId to prevent path traversal", async () => {
+    const logger = createLogger(logDir);
+    const child = logger.child({ ticketId: "../evil" });
+    child.info("traversal attempt");
+    await new Promise((r) => setTimeout(r, 200));
+    const files = await readdir(logDir);
+    expect(files).not.toContain("../evil.log");
+    const sanitizedFile = files.find((f) => f.includes("evil"));
+    expect(sanitizedFile).toBe("___evil.log");
   });
 
   it("child logger supports further nesting", () => {

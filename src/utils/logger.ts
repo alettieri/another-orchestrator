@@ -43,17 +43,31 @@ class TicketFileRouter extends Writable {
       } else {
         callback();
       }
-    } catch {
+    } catch (err) {
+      console.error(`[TicketFileRouter] Failed to parse log line: ${err}`);
       callback();
     }
   }
 
+  override _final(callback: (error?: Error | null) => void): void {
+    const closePromises = Array.from(this.fileStreams.values()).map(
+      (stream) => new Promise<void>((resolve) => stream.end(() => resolve())),
+    );
+    Promise.all(closePromises)
+      .then(() => {
+        this.fileStreams.clear();
+        callback(null);
+      })
+      .catch(callback);
+  }
+
   private getOrCreateStream(ticketId: string): WriteStream {
-    let stream = this.fileStreams.get(ticketId);
+    const safeId = ticketId.replace(/[^a-zA-Z0-9_-]/g, "_");
+    let stream = this.fileStreams.get(safeId);
     if (!stream) {
-      const filePath = join(this.logDir, `${ticketId}.log`);
+      const filePath = join(this.logDir, `${safeId}.log`);
       stream = createWriteStream(filePath, { flags: "a" });
-      this.fileStreams.set(ticketId, stream);
+      this.fileStreams.set(safeId, stream);
     }
     return stream;
   }
