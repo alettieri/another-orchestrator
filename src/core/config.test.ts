@@ -1,11 +1,54 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { loadConfig, resolveAgent } from "./config.js";
+import {
+  findConfigFile,
+  loadConfig,
+  resolveAgent,
+  resolveOrchestratorHome,
+} from "./config.js";
 import type { OrchestratorConfig } from "./types.js";
 
-describe("loadConfig", () => {
+const minimalYaml = `
+defaultAgent: claude
+agents:
+  claude:
+    command: claude
+    defaultArgs: []
+`;
+
+const fullYaml = `
+defaultAgent: claude
+agents:
+  claude:
+    command: claude
+    defaultArgs: []
+stateDir: ./state
+logDir: ./logs
+workflowDir: ./workflows
+promptDir: ./prompts
+scriptDir: ./scripts
+skillsDir: ./skills
+`;
+
+describe("resolveOrchestratorHome", () => {
+  afterEach(() => {
+    delete process.env.ORCHESTRATOR_HOME;
+  });
+
+  it("returns ~/.orchestrator by default", () => {
+    delete process.env.ORCHESTRATOR_HOME;
+    expect(resolveOrchestratorHome()).toBe(join(homedir(), ".orchestrator"));
+  });
+
+  it("respects ORCHESTRATOR_HOME env var", () => {
+    process.env.ORCHESTRATOR_HOME = "/custom/home";
+    expect(resolveOrchestratorHome()).toBe("/custom/home");
+  });
+});
+
+describe("findConfigFile", () => {
   let tmpDir: string;
 
   beforeEach(async () => {
@@ -18,72 +61,128 @@ describe("loadConfig", () => {
 
   afterEach(async () => {
     await rm(tmpDir, { recursive: true, force: true });
+    delete process.env.ORCHESTRATOR_HOME;
   });
 
-  it("loads and validates a YAML config", async () => {
-    const configContent = `
-defaultAgent: claude
-agents:
-  claude:
-    command: claude
-    defaultArgs: []
-stateDir: ./state
-logDir: ./logs
-workflowDir: ./workflows
-promptDir: ./prompts
-scriptDir: ./scripts
-`;
-    const configPath = join(tmpDir, "orchestrator.yaml");
-    await writeFile(configPath, configContent);
+  it("returns explicit path when it exists", async () => {
+    const configPath = join(tmpDir, "custom.yaml");
+    await writeFile(configPath, minimalYaml);
+    expect(findConfigFile(configPath)).toBe(configPath);
+  });
 
-    const config = await loadConfig(configPath);
+  it("throws when explicit path does not exist", () => {
+    expect(() => findConfigFile(join(tmpDir, "nope.yaml"))).toThrow(
+      "Config file not found",
+    );
+  });
+
+  it("finds config in ORCHESTRATOR_HOME", async () => {
+    process.env.ORCHESTRATOR_HOME = tmpDir;
+    const configPath = join(tmpDir, "config.yaml");
+    await writeFile(configPath, minimalYaml);
+    expect(findConfigFile()).toBe(configPath);
+  });
+
+  it("throws descriptive error when no config found", () => {
+    process.env.ORCHESTRATOR_HOME = join(tmpDir, "empty-home");
+    // chdir to a directory without orchestrator.yaml to avoid CWD fallback
+    const originalCwd = process.cwd();
+    process.chdir(tmpDir);
+    try {
+      expect(() => findConfigFile()).toThrow("No config file found");
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+});
+
+describe("loadConfig", () => {
+  let tmpDir: string;
+  let pkgDir: string;
+
+  beforeEach(async () => {
+    tmpDir = join(
+      tmpdir(),
+      `config-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    pkgDir = join(tmpDir, "package");
+    await mkdir(tmpDir, { recursive: true });
+    await mkdir(pkgDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+    delete process.env.ORCHESTRATOR_HOME;
+  });
+
+  it("loads and validates a YAML config with explicit dirs", async () => {
+    const configPath = join(tmpDir, "orchestrator.yaml");
+    await writeFile(configPath, fullYaml);
+
+    const config = await loadConfig({ configPath, packageDir: pkgDir });
     expect(config.defaultAgent).toBe("claude");
     expect(config.pollInterval).toBe(10);
     expect(config.maxConcurrency).toBe(3);
   });
 
-  it("resolves relative paths to absolute based on config dir", async () => {
-    const configContent = `
-defaultAgent: claude
-agents:
-  claude:
-    command: claude
-    defaultArgs: []
-stateDir: ./state
-logDir: ./logs
-workflowDir: ./workflows
-promptDir: ./prompts
-scriptDir: ./scripts
-`;
+  it("resolves explicit relative paths based on config dir", async () => {
     const configPath = join(tmpDir, "orchestrator.yaml");
-    await writeFile(configPath, configContent);
+    await writeFile(configPath, fullYaml);
 
-    const config = await loadConfig(configPath);
+    const config = await loadConfig({ configPath, packageDir: pkgDir });
     expect(config.stateDir).toBe(join(tmpDir, "state"));
     expect(config.logDir).toBe(join(tmpDir, "logs"));
     expect(config.workflowDir).toBe(join(tmpDir, "workflows"));
     expect(config.promptDir).toBe(join(tmpDir, "prompts"));
     expect(config.scriptDir).toBe(join(tmpDir, "scripts"));
+    expect(config.skillsDir).toBe(join(tmpDir, "skills"));
+  });
+
+  it("applies smart defaults when dirs are omitted", async () => {
+    process.env.ORCHESTRATOR_HOME = join(tmpDir, "home");
+    await mkdir(join(tmpDir, "home"), { recursive: true });
+
+    const configPath = join(tmpDir, "home", "config.yaml");
+    await writeFile(configPath, minimalYaml);
+
+    const config = await loadConfig({ configPath, packageDir: pkgDir });
+
+    // User data dirs default to home
+    expect(config.stateDir).toBe(join(tmpDir, "home", "state"));
+    expect(config.logDir).toBe(join(tmpDir, "home", "logs"));
+
+    // Bundled dirs default to packageDir
+    expect(config.workflowDir).toBe(join(pkgDir, "workflows"));
+    expect(config.promptDir).toBe(join(pkgDir, "prompts"));
+    expect(config.scriptDir).toBe(join(pkgDir, "scripts"));
+    expect(config.skillsDir).toBe(join(pkgDir, "skills"));
   });
 
   it("throws on invalid YAML", async () => {
     const configPath = join(tmpDir, "bad.yaml");
     await writeFile(configPath, "not: [valid: yaml: {{{}}}");
 
-    await expect(loadConfig(configPath)).rejects.toThrow();
+    await expect(
+      loadConfig({ configPath, packageDir: pkgDir }),
+    ).rejects.toThrow();
   });
 
   it("throws on missing required fields", async () => {
     const configPath = join(tmpDir, "missing.yaml");
-    await writeFile(configPath, "defaultAgent: claude\n");
+    await writeFile(configPath, "pollInterval: 10\n");
 
-    await expect(loadConfig(configPath)).rejects.toThrow();
+    await expect(
+      loadConfig({ configPath, packageDir: pkgDir }),
+    ).rejects.toThrow();
   });
 
   it("throws on missing file", async () => {
     await expect(
-      loadConfig(join(tmpDir, "nonexistent.yaml")),
-    ).rejects.toThrow();
+      loadConfig({
+        configPath: join(tmpDir, "nonexistent.yaml"),
+        packageDir: pkgDir,
+      }),
+    ).rejects.toThrow("Config file not found");
   });
 });
 
@@ -99,6 +198,7 @@ describe("resolveAgent", () => {
     workflowDir: "/tmp/workflows",
     promptDir: "/tmp/prompts",
     scriptDir: "/tmp/scripts",
+    skillsDir: "/tmp/skills",
     pollInterval: 10,
     maxConcurrency: 3,
     ghCommand: "gh",

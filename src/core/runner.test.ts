@@ -133,6 +133,7 @@ phases:
       workflowDir,
       promptDir,
       scriptDir,
+      skillsDir: join(tmpDir, "skills"),
       pollInterval: 10,
       maxConcurrency: 3,
       ghCommand: "gh",

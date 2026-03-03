@@ -5,6 +5,13 @@
   "bin": {
     "orchestrator": "./dist/cli.js"
   },
+  "files": [
+    "dist",
+    "workflows",
+    "prompts",
+    "scripts",
+    "skills"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/cli.ts",
@@ -17,7 +24,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@mariozechner/pi-coding-agent": "^0.55.3",
+    "@mariozechner/pi-coding-agent": "^0.55.4",
     "@sinclair/typebox": "^0.34.48",
     "chalk": "^5.4.1",
     "chokidar": "^4.0.3",

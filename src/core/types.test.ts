@@ -3,6 +3,7 @@ import {
   AgentConfigSchema,
   OrchestratorConfigSchema,
   PlanFileSchema,
+  RawOrchestratorConfigSchema,
   TicketStatusSchema,
   WorkflowDefinitionSchema,
 } from "./types.js";
@@ -26,6 +27,53 @@ describe("AgentConfigSchema", () => {
   });
 });
 
+describe("RawOrchestratorConfigSchema", () => {
+  it("accepts config with no directory fields", () => {
+    const result = RawOrchestratorConfigSchema.parse({
+      defaultAgent: "claude",
+      agents: {
+        claude: { command: "claude", defaultArgs: [] },
+      },
+    });
+    expect(result.defaultAgent).toBe("claude");
+    expect(result.stateDir).toBeUndefined();
+    expect(result.logDir).toBeUndefined();
+    expect(result.workflowDir).toBeUndefined();
+    expect(result.promptDir).toBeUndefined();
+    expect(result.scriptDir).toBeUndefined();
+    expect(result.skillsDir).toBeUndefined();
+  });
+
+  it("accepts config with explicit directory fields", () => {
+    const result = RawOrchestratorConfigSchema.parse({
+      defaultAgent: "claude",
+      agents: {
+        claude: { command: "claude", defaultArgs: [] },
+      },
+      stateDir: "./state",
+      logDir: "./logs",
+      workflowDir: "./workflows",
+      promptDir: "./prompts",
+      scriptDir: "./scripts",
+      skillsDir: "./skills",
+    });
+    expect(result.stateDir).toBe("./state");
+    expect(result.skillsDir).toBe("./skills");
+  });
+
+  it("applies defaults for non-directory fields", () => {
+    const result = RawOrchestratorConfigSchema.parse({
+      defaultAgent: "claude",
+      agents: {
+        claude: { command: "claude", defaultArgs: [] },
+      },
+    });
+    expect(result.pollInterval).toBe(10);
+    expect(result.maxConcurrency).toBe(3);
+    expect(result.ghCommand).toBe("gh");
+  });
+});
+
 describe("OrchestratorConfigSchema", () => {
   const validConfig = {
     defaultAgent: "claude",
@@ -37,6 +85,7 @@ describe("OrchestratorConfigSchema", () => {
     workflowDir: "workflows",
     promptDir: "prompts",
     scriptDir: "scripts",
+    skillsDir: "skills",
   };
 
   it("parses a valid config with defaults", () => {
@@ -44,6 +93,7 @@ describe("OrchestratorConfigSchema", () => {
     expect(result.pollInterval).toBe(10);
     expect(result.maxConcurrency).toBe(3);
     expect(result.ghCommand).toBe("gh");
+    expect(result.skillsDir).toBe("skills");
   });
 
   it("allows overriding defaults", () => {
@@ -62,6 +112,11 @@ describe("OrchestratorConfigSchema", () => {
     expect(() =>
       OrchestratorConfigSchema.parse({ defaultAgent: "claude" }),
     ).toThrow();
+  });
+
+  it("rejects missing skillsDir", () => {
+    const { skillsDir, ...withoutSkills } = validConfig;
+    expect(() => OrchestratorConfigSchema.parse(withoutSkills)).toThrow();
   });
 });
 

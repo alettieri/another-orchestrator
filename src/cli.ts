@@ -1,11 +1,21 @@
 #!/usr/bin/env node
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import chalk from "chalk";
 import { Command } from "commander";
-import { buildPlanEnv, spawnInteractive } from "./agents/interactive.js";
-import { loadConfig, resolveAgent } from "./core/config.js";
+import {
+  buildPlanEnv,
+  runPiInteractive,
+  spawnInteractive,
+} from "./agents/interactive.js";
+import {
+  findConfigFile,
+  type LoadConfigOptions,
+  loadConfig,
+  resolveAgent,
+  resolveOrchestratorHome,
+} from "./core/config.js";
 import { createRunner } from "./core/runner.js";
 import { createStateManager } from "./core/state.js";
 import { createLogger } from "./utils/logger.js";
@@ -13,37 +23,62 @@ import { createLogger } from "./utils/logger.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const packageDir = resolve(__dirname, "..");
+
 const program = new Command();
 
 program
   .name("orchestrator")
   .description("CLI-driven orchestrator for managing agent workflows")
-  .version("0.1.0");
+  .version("0.1.0")
+  .option("-C, --config <path>", "Path to config file");
+
+function getConfigOptions(): LoadConfigOptions {
+  const opts = program.opts<{ config?: string }>();
+  return { configPath: opts.config, packageDir };
+}
 
 program
   .command("init")
-  .description("Scaffold project directories and default config")
-  .option("-d, --dir <path>", "Target directory", ".")
-  .action(async (opts: { dir: string }) => {
-    const targetDir = resolve(opts.dir);
-    const dirs = ["state", "logs", "workflows", "prompts", "scripts", "skills"];
+  .description("Create default config and directories in ~/.orchestrator")
+  .option("-d, --dir <path>", "Target directory (default: ~/.orchestrator)")
+  .action(async (opts: { dir?: string }) => {
+    const targetDir = opts.dir ? resolve(opts.dir) : resolveOrchestratorHome();
+    const dirs = ["state", "logs"];
 
     for (const dir of dirs) {
       await mkdir(join(targetDir, dir), { recursive: true });
     }
 
-    const defaultConfigSrc = resolve(__dirname, "..", "orchestrator.yaml");
-    const defaultConfigDest = join(targetDir, "orchestrator.yaml");
+    const configPath = join(targetDir, "config.yaml");
+    const configContent = `defaultAgent: claude
 
-    try {
-      await copyFile(defaultConfigSrc, defaultConfigDest);
-    } catch {
-      // If the default config doesn't exist at expected location, skip
-    }
+agents:
+  claude:
+    command: claude
+    defaultArgs:
+      - "--dangerously-skip-permissions"
+  codex:
+    command: codex
+    defaultArgs:
+      - "--approval-mode"
+      - "never"
+  pi:
+    command: pi
+    defaultArgs: []
+
+pollInterval: 10
+maxConcurrency: 3
+ghCommand: gh
+`;
+    await writeFile(configPath, configContent, { flag: "wx" }).catch(() => {
+      // File already exists, don't overwrite
+    });
 
     const logger = createLogger(join(targetDir, "logs"));
-    logger.success(`Project initialized in ${targetDir}`);
+    logger.success(`Initialized in ${targetDir}`);
     console.log(chalk.dim(`  Created directories: ${dirs.join(", ")}`));
+    console.log(chalk.dim(`  Config: ${configPath}`));
   });
 
 program
@@ -52,7 +87,7 @@ program
   .option("-p, --plan <planId>", "Show a specific plan")
   .option("--json", "Output as JSON")
   .action(async (opts: { plan?: string; json?: boolean }) => {
-    const config = await loadConfig();
+    const config = await loadConfig(getConfigOptions());
     const state = createStateManager(config.stateDir);
 
     if (opts.plan) {
@@ -115,7 +150,7 @@ program
   .argument("<planId>", "Plan ID")
   .argument("<ticketId>", "Ticket ID")
   .action(async (planId: string, ticketId: string) => {
-    const config = await loadConfig();
+    const config = await loadConfig(getConfigOptions());
     const runner = createRunner(config);
 
     console.log(
@@ -150,7 +185,7 @@ program
   .option("-c, --concurrency <n>", "Max concurrent tickets", Number.parseInt)
   .option("-a, --agent <name>", "Override default agent")
   .action(async (opts: { concurrency?: number; agent?: string }) => {
-    const config = await loadConfig();
+    const config = await loadConfig(getConfigOptions());
     if (opts.concurrency !== undefined) {
       config.maxConcurrency = opts.concurrency;
     }
@@ -186,7 +221,7 @@ program
   .command("tick")
   .description("Run a single daemon tick and exit")
   .action(async () => {
-    const config = await loadConfig();
+    const config = await loadConfig(getConfigOptions());
     const runner = createRunner(config);
     await runner.tick();
   });
@@ -197,7 +232,7 @@ program
   .argument("<planId>", "Plan ID")
   .argument("<ticketId>", "Ticket ID")
   .action(async (planId: string, ticketId: string) => {
-    const config = await loadConfig();
+    const config = await loadConfig(getConfigOptions());
     const state = createStateManager(config.stateDir);
     await state.updateTicket(planId, ticketId, { status: "paused" });
     console.log(chalk.green(`Paused ticket ${ticketId} in plan ${planId}`));
@@ -209,7 +244,7 @@ program
   .argument("<planId>", "Plan ID")
   .argument("<ticketId>", "Ticket ID")
   .action(async (planId: string, ticketId: string) => {
-    const config = await loadConfig();
+    const config = await loadConfig(getConfigOptions());
     const state = createStateManager(config.stateDir);
     await state.updateTicket(planId, ticketId, { status: "ready" });
     console.log(chalk.green(`Resumed ticket ${ticketId} in plan ${planId}`));
@@ -222,7 +257,7 @@ program
   .argument("<ticketId>", "Ticket ID")
   .argument("<phase>", "Phase to skip to")
   .action(async (planId: string, ticketId: string, phase: string) => {
-    const config = await loadConfig();
+    const config = await loadConfig(getConfigOptions());
     const state = createStateManager(config.stateDir);
     await state.updateTicket(planId, ticketId, {
       currentPhase: phase,
@@ -241,7 +276,7 @@ program
   .argument("<planId>", "Plan ID")
   .argument("<ticketId>", "Ticket ID")
   .action(async (planId: string, ticketId: string) => {
-    const config = await loadConfig();
+    const config = await loadConfig(getConfigOptions());
     const state = createStateManager(config.stateDir);
     const ticket = await state.getTicket(planId, ticketId);
     if (!ticket) {
@@ -267,7 +302,7 @@ program
   .description("Pause an entire plan")
   .argument("<planId>", "Plan ID")
   .action(async (planId: string) => {
-    const config = await loadConfig();
+    const config = await loadConfig(getConfigOptions());
     const state = createStateManager(config.stateDir);
     const plan = await state.getPlan(planId);
     if (!plan) {
@@ -284,7 +319,7 @@ program
   .description("Resume a paused plan")
   .argument("<planId>", "Plan ID")
   .action(async (planId: string) => {
-    const config = await loadConfig();
+    const config = await loadConfig(getConfigOptions());
     const state = createStateManager(config.stateDir);
     const plan = await state.getPlan(planId);
     if (!plan) {
@@ -297,26 +332,33 @@ program
   });
 
 program
-  .command("plan")
-  .description("Launch an interactive PI session for planning")
-  .option("-r, --repo <path>", "Target repository path", ".")
+  .command("interactive")
+  .description(
+    "Launch an interactive PI session for planning and configuration",
+  )
+  .option("-r, --repo <path>", "Target repository or workspace path")
   .option("-w, --workflow <name>", "Default workflow to use")
   .option("--worktree-root <path>", "Root directory for worktrees")
   .action(
     async (opts: {
-      repo: string;
+      repo?: string;
       workflow?: string;
       worktreeRoot?: string;
     }) => {
-      const config = await loadConfig();
+      const configOpts = getConfigOptions();
+      const config = await loadConfig(configOpts);
+      const configPath = findConfigFile(configOpts.configPath);
 
       const agentName = resolveAgent(config, null, null, "pi");
       const agentConfig = config.agents[agentName];
 
+      const repoCwd = resolve(opts.repo ?? ".");
+
       const planEnv = buildPlanEnv(config, {
-        repo: opts.repo,
+        repo: repoCwd,
         workflow: opts.workflow,
         worktreeRoot: opts.worktreeRoot,
+        configPath,
       });
 
       // Write .pi/mcp.json if mcpServers are configured
@@ -328,7 +370,6 @@ program
             args: server.args,
           };
           if (server.env) {
-            // Interpolate env vars from process.env
             const resolvedEnv: Record<string, string> = {};
             for (const [k, v] of Object.entries(server.env)) {
               resolvedEnv[k] = v.replace(/\$\{(\w+)\}/g, (_match, varName) => {
@@ -340,26 +381,57 @@ program
           (mcpConfig.mcpServers as Record<string, unknown>)[name] = entry;
         }
 
-        const mcpJsonPath = join(resolve(opts.repo), ".pi", "mcp.json");
+        const mcpJsonPath = join(repoCwd, ".pi", "mcp.json");
         await mkdir(dirname(mcpJsonPath), { recursive: true });
         await writeFile(mcpJsonPath, JSON.stringify(mcpConfig, null, 2));
       }
 
-      console.log(chalk.bold("Launching PI planning session..."));
-      console.log(chalk.dim(`  Repo: ${planEnv.ORCHESTRATOR_REPO}`));
+      console.log(chalk.bold("Launching interactive planning session..."));
+      console.log(chalk.dim(`  CWD: ${repoCwd}`));
       if (planEnv.ORCHESTRATOR_WORKFLOW) {
         console.log(chalk.dim(`  Workflow: ${planEnv.ORCHESTRATOR_WORKFLOW}`));
       }
       console.log();
 
-      const exitCode = await spawnInteractive({
-        command: agentConfig.command,
-        args: agentConfig.defaultArgs,
-        cwd: resolve(opts.repo),
-        env: planEnv,
-      });
-
-      process.exitCode = exitCode;
+      if (agentName === "pi") {
+        // Call PI library directly — no need for `pi` to be on PATH
+        const systemPromptPath = join(
+          config.promptDir,
+          "interactive-system.md",
+        );
+        const piPkgEntry = fileURLToPath(
+          import.meta.resolve("@mariozechner/pi-coding-agent"),
+        );
+        const piPkgDir = dirname(dirname(piPkgEntry));
+        const questionExtPath = join(
+          piPkgDir,
+          "examples",
+          "extensions",
+          "question.ts",
+        );
+        const piArgs = [
+          ...agentConfig.defaultArgs,
+          "--skill",
+          config.skillsDir,
+          "--append-system-prompt",
+          systemPromptPath,
+          "--extension",
+          questionExtPath,
+        ];
+        await runPiInteractive({
+          args: piArgs,
+          cwd: repoCwd,
+          env: planEnv,
+        });
+      } else {
+        const exitCode = await spawnInteractive({
+          command: agentConfig.command,
+          args: agentConfig.defaultArgs,
+          cwd: repoCwd,
+          env: planEnv,
+        });
+        process.exitCode = exitCode;
+      }
     },
   );
 

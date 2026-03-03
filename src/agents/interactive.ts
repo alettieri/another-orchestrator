@@ -13,6 +13,7 @@ export interface PlanOptions {
   repo: string;
   workflow?: string;
   worktreeRoot?: string;
+  configPath: string;
 }
 
 export function buildPlanEnv(
@@ -24,6 +25,10 @@ export function buildPlanEnv(
     ORCHESTRATOR_STATE_DIR: config.stateDir,
     ORCHESTRATOR_WORKFLOW_DIR: config.workflowDir,
     ORCHESTRATOR_REPO: resolve(opts.repo),
+    ORCHESTRATOR_SKILLS_DIR: config.skillsDir,
+    ORCHESTRATOR_PROMPT_DIR: config.promptDir,
+    ORCHESTRATOR_SCRIPT_DIR: config.scriptDir,
+    ORCHESTRATOR_CONFIG_PATH: opts.configPath,
   };
 
   if (opts.workflow) {
@@ -35,6 +40,35 @@ export function buildPlanEnv(
   }
 
   return env;
+}
+
+export interface RunPiOptions {
+  args: string[];
+  cwd: string;
+  env: Record<string, string>;
+}
+
+export async function runPiInteractive(opts: RunPiOptions): Promise<void> {
+  const originalCwd = process.cwd();
+  const originalEnv = { ...process.env };
+
+  try {
+    process.chdir(opts.cwd);
+    Object.assign(process.env, opts.env);
+
+    const { main } = await import("@mariozechner/pi-coding-agent");
+    await main(opts.args);
+  } finally {
+    process.chdir(originalCwd);
+    // Restore env: remove keys we added, restore originals
+    for (const key of Object.keys(opts.env)) {
+      if (originalEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalEnv[key];
+      }
+    }
+  }
 }
 
 export function spawnInteractive(

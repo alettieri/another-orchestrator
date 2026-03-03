@@ -17,6 +17,25 @@ export const McpServerConfigSchema = z.object({
 
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
 
+// Raw schema: what the YAML config file contains (directory fields optional)
+export const RawOrchestratorConfigSchema = z.object({
+  defaultAgent: z.string(),
+  agents: z.record(z.string(), AgentConfigSchema),
+  stateDir: z.string().optional(),
+  logDir: z.string().optional(),
+  workflowDir: z.string().optional(),
+  promptDir: z.string().optional(),
+  scriptDir: z.string().optional(),
+  skillsDir: z.string().optional(),
+  pollInterval: z.number().default(10),
+  maxConcurrency: z.number().default(3),
+  ghCommand: z.string().default("gh"),
+  mcpServers: z.record(z.string(), McpServerConfigSchema).optional(),
+});
+
+export type RawOrchestratorConfig = z.infer<typeof RawOrchestratorConfigSchema>;
+
+// Resolved schema: all directories are resolved to absolute paths
 export const OrchestratorConfigSchema = z.object({
   defaultAgent: z.string(),
   agents: z.record(z.string(), AgentConfigSchema),
@@ -25,6 +44,7 @@ export const OrchestratorConfigSchema = z.object({
   workflowDir: z.string(),
   promptDir: z.string(),
   scriptDir: z.string(),
+  skillsDir: z.string(),
   pollInterval: z.number().default(10),
   maxConcurrency: z.number().default(3),
   ghCommand: z.string().default("gh"),

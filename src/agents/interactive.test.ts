@@ -13,6 +13,7 @@ const mockConfig: OrchestratorConfig = {
   workflowDir: "/abs/workflows",
   promptDir: "/abs/prompts",
   scriptDir: "/abs/scripts",
+  skillsDir: "/abs/skills",
   pollInterval: 10,
   maxConcurrency: 3,
   ghCommand: "gh",
@@ -20,7 +21,10 @@ const mockConfig: OrchestratorConfig = {
 
 describe("buildPlanEnv", () => {
   it("includes required env vars", () => {
-    const env = buildPlanEnv(mockConfig, { repo: "/my/repo" });
+    const env = buildPlanEnv(mockConfig, {
+      repo: "/my/repo",
+      configPath: "/home/.orchestrator/config.yaml",
+    });
 
     expect(env.ORCHESTRATOR_MODE).toBe("plan");
     expect(env.ORCHESTRATOR_STATE_DIR).toBe("/abs/state");
@@ -28,17 +32,43 @@ describe("buildPlanEnv", () => {
     expect(env.ORCHESTRATOR_REPO).toBe(resolve("/my/repo"));
   });
 
+  it("includes resource directory env vars", () => {
+    const env = buildPlanEnv(mockConfig, {
+      repo: "/my/repo",
+      configPath: "/home/.orchestrator/config.yaml",
+    });
+
+    expect(env.ORCHESTRATOR_SKILLS_DIR).toBe("/abs/skills");
+    expect(env.ORCHESTRATOR_PROMPT_DIR).toBe("/abs/prompts");
+    expect(env.ORCHESTRATOR_SCRIPT_DIR).toBe("/abs/scripts");
+  });
+
+  it("includes config path", () => {
+    const env = buildPlanEnv(mockConfig, {
+      repo: "/my/repo",
+      configPath: "/home/.orchestrator/config.yaml",
+    });
+
+    expect(env.ORCHESTRATOR_CONFIG_PATH).toBe(
+      "/home/.orchestrator/config.yaml",
+    );
+  });
+
   it("includes workflow when provided", () => {
     const env = buildPlanEnv(mockConfig, {
       repo: "/my/repo",
       workflow: "standard",
+      configPath: "/cfg/config.yaml",
     });
 
     expect(env.ORCHESTRATOR_WORKFLOW).toBe("standard");
   });
 
   it("excludes workflow when not provided", () => {
-    const env = buildPlanEnv(mockConfig, { repo: "/my/repo" });
+    const env = buildPlanEnv(mockConfig, {
+      repo: "/my/repo",
+      configPath: "/cfg/config.yaml",
+    });
 
     expect(env.ORCHESTRATOR_WORKFLOW).toBeUndefined();
   });
@@ -47,19 +77,26 @@ describe("buildPlanEnv", () => {
     const env = buildPlanEnv(mockConfig, {
       repo: "/my/repo",
       worktreeRoot: "/my/worktrees",
+      configPath: "/cfg/config.yaml",
     });
 
     expect(env.ORCHESTRATOR_WORKTREE_ROOT).toBe(resolve("/my/worktrees"));
   });
 
   it("excludes worktree root when not provided", () => {
-    const env = buildPlanEnv(mockConfig, { repo: "/my/repo" });
+    const env = buildPlanEnv(mockConfig, {
+      repo: "/my/repo",
+      configPath: "/cfg/config.yaml",
+    });
 
     expect(env.ORCHESTRATOR_WORKTREE_ROOT).toBeUndefined();
   });
 
   it("resolves relative repo path to absolute", () => {
-    const env = buildPlanEnv(mockConfig, { repo: "./my-project" });
+    const env = buildPlanEnv(mockConfig, {
+      repo: "./my-project",
+      configPath: "/cfg/config.yaml",
+    });
 
     expect(env.ORCHESTRATOR_REPO).toBe(resolve("./my-project"));
     expect(env.ORCHESTRATOR_REPO).toMatch(/^\//);
