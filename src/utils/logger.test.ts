@@ -127,11 +127,12 @@ describe("createLogger", () => {
     const now = new Date();
     const expectedMinutes = String(now.getMinutes()).padStart(2, "0");
 
-    prettyStream.write(
-      `${JSON.stringify({ level: 30, time: Date.now(), msg: "ts-check" })}\n`,
-    );
-
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise<void>((resolve, reject) => {
+      prettyStream.write(
+        `${JSON.stringify({ level: 30, time: now.getTime(), msg: "ts-check" })}\n`,
+        (err) => (err ? reject(err) : resolve()),
+      );
+    });
 
     const output = chunks.join("");
     const timestampMatch = output.match(/(\d{2}):(\d{2}):(\d{2})/);
