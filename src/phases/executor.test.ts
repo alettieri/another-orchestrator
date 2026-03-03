@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import pino from "pino";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTemplateRenderer } from "../core/template.js";
 import type {
@@ -12,15 +13,10 @@ import type { Logger } from "../utils/logger.js";
 import { createPhaseExecutor } from "./executor.js";
 
 function makeLogger(): Logger {
-  return {
-    info() {},
-    warn() {},
-    error() {},
-    success() {},
-    phaseStart() {},
-    phaseEnd() {},
-    agentOutput() {},
-  };
+  return pino<"success">({
+    level: "silent",
+    customLevels: { success: 35 },
+  });
 }
 
 function makeTicket(overrides: Partial<TicketState> = {}): TicketState {

@@ -41,6 +41,7 @@ export function createPhaseExecutor(
   async function runScript(
     phase: PhaseDefinition,
     ticket: TicketState,
+    log: Logger,
   ): Promise<{ success: boolean; output: string }> {
     if (!phase.command) {
       return { success: false, output: "Script phase missing command" };
@@ -51,10 +52,7 @@ export function createPhaseExecutor(
       templateRenderer.renderString(a, ticket),
     );
 
-    logger.info(
-      `Running script: ${scriptPath} ${args.join(" ")}`,
-      ticket.ticketId,
-    );
+    log.info(`Running script: ${scriptPath} ${args.join(" ")}`);
 
     const result = await execCommand("/bin/bash", [scriptPath, ...args], {
       cwd: resolveCwd(ticket),
@@ -62,7 +60,7 @@ export function createPhaseExecutor(
     });
 
     if (result.stderr) {
-      logger.warn(`Script stderr: ${result.stderr}`, ticket.ticketId);
+      log.warn(`Script stderr: ${result.stderr}`);
     }
 
     return {
@@ -118,6 +116,7 @@ export function createPhaseExecutor(
     phase: PhaseDefinition,
     ticket: TicketState,
     planAgent: string | null,
+    log: Logger,
   ): Promise<PhaseResult> {
     if (!phase.promptTemplate) {
       return {
@@ -137,7 +136,7 @@ export function createPhaseExecutor(
     );
     const agentConfig = config.agents[agentName];
 
-    logger.info(`Invoking agent "${agentName}"`, ticket.ticketId);
+    log.info(`Invoking agent "${agentName}"`);
 
     const agentResult = await invokeAgent(
       agentConfig,
@@ -148,7 +147,7 @@ export function createPhaseExecutor(
         maxTurns: phase.maxTurns,
       },
       {
-        onOutput: (chunk) => logger.agentOutput(ticket.ticketId, chunk),
+        onOutput: (chunk) => log.trace(chunk),
       },
     );
 
@@ -166,6 +165,7 @@ export function createPhaseExecutor(
   async function executePollPhase(
     phase: PhaseDefinition,
     ticket: TicketState,
+    log: Logger,
   ): Promise<PhaseResult> {
     if (!phase.command) {
       return {
@@ -181,7 +181,7 @@ export function createPhaseExecutor(
       templateRenderer.renderString(a, ticket),
     );
 
-    logger.info(`Polling: ${scriptPath} ${args.join(" ")}`, ticket.ticketId);
+    log.info(`Polling: ${scriptPath} ${args.join(" ")}`);
 
     const result = await execCommand("/bin/bash", [scriptPath, ...args], {
       cwd: resolveCwd(ticket),
@@ -219,8 +219,9 @@ export function createPhaseExecutor(
   async function executeScriptPhase(
     phase: PhaseDefinition,
     ticket: TicketState,
+    log: Logger,
   ): Promise<PhaseResult> {
-    const { success, output } = await runScript(phase, ticket);
+    const { success, output } = await runScript(phase, ticket, log);
     const captured = await captureValues(phase, output, ticket);
     const nextPhase = getNextPhase(phase, success);
 
@@ -229,15 +230,16 @@ export function createPhaseExecutor(
 
   return {
     async execute(phase, ticket, _planAgent) {
+      const log = logger.child({ ticketId: ticket.ticketId });
       switch (phase.type) {
         case PhaseTypeSchema.enum.terminal:
           return executeTerminalPhase(phase);
         case PhaseTypeSchema.enum.agent:
-          return executeAgentPhase(phase, ticket, _planAgent);
+          return executeAgentPhase(phase, ticket, _planAgent, log);
         case PhaseTypeSchema.enum.poll:
-          return executePollPhase(phase, ticket);
+          return executePollPhase(phase, ticket, log);
         case PhaseTypeSchema.enum.script:
-          return executeScriptPhase(phase, ticket);
+          return executeScriptPhase(phase, ticket, log);
         default: {
           const _exhaustive: never = phase.type;
           throw new Error(`Unknown phase type: ${_exhaustive}`);

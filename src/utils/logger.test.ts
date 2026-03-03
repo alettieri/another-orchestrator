@@ -1,7 +1,7 @@
 import { readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createLogger } from "./logger.js";
 
 describe("createLogger", () => {
@@ -12,97 +12,97 @@ describe("createLogger", () => {
       tmpdir(),
       `logger-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     );
-    vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
   afterEach(async () => {
-    vi.restoreAllMocks();
     await rm(logDir, { recursive: true, force: true });
   });
 
-  it("logs info to console", () => {
+  it("has all expected methods", () => {
     const logger = createLogger(logDir);
-    logger.info("test message");
-    expect(console.log).toHaveBeenCalledOnce();
-    expect(vi.mocked(console.log).mock.calls[0][0]).toContain("INFO");
-    expect(vi.mocked(console.log).mock.calls[0][0]).toContain("test message");
+    expect(typeof logger.info).toBe("function");
+    expect(typeof logger.warn).toBe("function");
+    expect(typeof logger.error).toBe("function");
+    expect(typeof logger.success).toBe("function");
+    expect(typeof logger.trace).toBe("function");
+    expect(typeof logger.child).toBe("function");
   });
 
-  it("logs with ticketId tag in console", () => {
+  it("child logger has the same methods", () => {
     const logger = createLogger(logDir);
-    logger.info("msg", "ticket-1");
-    expect(vi.mocked(console.log).mock.calls[0][0]).toContain("[ticket-1]");
+    const child = logger.child({ ticketId: "ticket-1" });
+    expect(typeof child.info).toBe("function");
+    expect(typeof child.warn).toBe("function");
+    expect(typeof child.error).toBe("function");
+    expect(typeof child.success).toBe("function");
+    expect(typeof child.trace).toBe("function");
+    expect(typeof child.child).toBe("function");
   });
 
-  it("writes to file when ticketId is provided", async () => {
+  it("writes structured JSON to log file with ticketId in metadata", async () => {
     const logger = createLogger(logDir);
-    logger.info("file message", "ticket-2");
-    // Wait for async file write
-    await new Promise((r) => setTimeout(r, 100));
-    const content = await readFile(join(logDir, "ticket-2.log"), "utf-8");
-    expect(content).toContain("[INFO]");
-    expect(content).toContain("file message");
+    const child = logger.child({ ticketId: "ticket-1" });
+    child.info("test message");
+    await logger.flush();
+    const content = await readFile(join(logDir, "orchestrator.log"), "utf-8");
+    const lines = content.trim().split("\n");
+    expect(lines.length).toBeGreaterThanOrEqual(1);
+    const parsed = JSON.parse(lines[0]);
+    expect(parsed.ticketId).toBe("ticket-1");
+    expect(parsed.msg).toBe("test message");
+    expect(parsed.level).toBe(30);
   });
 
-  it("does not write to file when ticketId is omitted", async () => {
+  it("writes entries from different tickets to the same log file", async () => {
     const logger = createLogger(logDir);
-    logger.info("no file");
-    await new Promise((r) => setTimeout(r, 100));
-    await expect(
-      readFile(join(logDir, "undefined.log"), "utf-8"),
-    ).rejects.toThrow();
+    const child1 = logger.child({ ticketId: "ticket-A" });
+    const child2 = logger.child({ ticketId: "ticket-B" });
+    child1.info("from A");
+    child2.info("from B");
+    await logger.flush();
+    const content = await readFile(join(logDir, "orchestrator.log"), "utf-8");
+    const lines = content.trim().split("\n");
+    expect(lines.length).toBe(2);
+    expect(JSON.parse(lines[0]).ticketId).toBe("ticket-A");
+    expect(JSON.parse(lines[1]).ticketId).toBe("ticket-B");
   });
 
-  it("logs warn with yellow level", () => {
+  it("writes logs without ticketId to the log file", async () => {
     const logger = createLogger(logDir);
-    logger.warn("warning!");
-    expect(console.log).toHaveBeenCalledOnce();
-    expect(vi.mocked(console.log).mock.calls[0][0]).toContain("WARN");
+    logger.info("daemon message");
+    await logger.flush();
+    const content = await readFile(join(logDir, "orchestrator.log"), "utf-8");
+    const parsed = JSON.parse(content.trim());
+    expect(parsed.msg).toBe("daemon message");
+    expect(parsed.ticketId).toBeUndefined();
   });
 
-  it("logs error with red level", () => {
+  it("writes different log levels", async () => {
     const logger = createLogger(logDir);
-    logger.error("error!");
-    expect(console.log).toHaveBeenCalledOnce();
-    expect(vi.mocked(console.log).mock.calls[0][0]).toContain("ERROR");
+    const child = logger.child({ ticketId: "ticket-1" });
+    child.trace("trace msg");
+    child.info("info msg");
+    child.warn("warn msg");
+    child.error("error msg");
+    child.success("success msg");
+    await logger.flush();
+    const content = await readFile(join(logDir, "orchestrator.log"), "utf-8");
+    const lines = content
+      .trim()
+      .split("\n")
+      .map((l) => JSON.parse(l));
+    expect(lines[0].level).toBe(10);
+    expect(lines[1].level).toBe(30);
+    expect(lines[2].level).toBe(40);
+    expect(lines[3].level).toBe(50);
+    expect(lines[4].level).toBe(35);
   });
 
-  it("logs success with green level", () => {
+  it("child logger supports further nesting", () => {
     const logger = createLogger(logDir);
-    logger.success("done!");
-    expect(console.log).toHaveBeenCalledOnce();
-    expect(vi.mocked(console.log).mock.calls[0][0]).toContain("SUCCESS");
-  });
-
-  it("phaseStart logs to console and file", async () => {
-    const logger = createLogger(logDir);
-    logger.phaseStart("build", "ticket-3");
-    expect(vi.mocked(console.log).mock.calls[0][0]).toContain("build");
-    await new Promise((r) => setTimeout(r, 100));
-    const content = await readFile(join(logDir, "ticket-3.log"), "utf-8");
-    expect(content).toContain("build");
-  });
-
-  it("phaseEnd logs success status", () => {
-    const logger = createLogger(logDir);
-    logger.phaseEnd("build", "ticket-4", "success");
-    expect(vi.mocked(console.log).mock.calls[0][0]).toContain("SUCCESS");
-    expect(vi.mocked(console.log).mock.calls[0][0]).toContain("build");
-  });
-
-  it("phaseEnd logs failure status", () => {
-    const logger = createLogger(logDir);
-    logger.phaseEnd("build", "ticket-5", "failure");
-    expect(vi.mocked(console.log).mock.calls[0][0]).toContain("ERROR");
-  });
-
-  it("agentOutput writes only to file", async () => {
-    const logger = createLogger(logDir);
-    logger.agentOutput("ticket-6", "agent says hello");
-    expect(console.log).not.toHaveBeenCalled();
-    await new Promise((r) => setTimeout(r, 100));
-    const content = await readFile(join(logDir, "ticket-6.log"), "utf-8");
-    expect(content).toContain("[AGENT]");
-    expect(content).toContain("agent says hello");
+    const child = logger.child({ ticketId: "ticket-7" });
+    const grandchild = child.child({ phase: "build" });
+    expect(typeof grandchild.info).toBe("function");
+    grandchild.info("nested log");
   });
 });
