@@ -4,14 +4,7 @@ import { Writable } from "node:stream";
 import pino from "pino";
 import pretty from "pino-pretty";
 
-export interface Logger {
-  info(msg: string): void;
-  warn(msg: string): void;
-  error(msg: string): void;
-  success(msg: string): void;
-  trace(msg: string): void;
-  child(bindings: Record<string, string>): Logger;
-}
+export type Logger = pino.Logger<"success">;
 
 /**
  * Routes pino JSON log lines to per-ticket files based on the ticketId binding.
@@ -73,29 +66,6 @@ class TicketFileRouter extends Writable {
   }
 }
 
-function wrapPino(pinoLogger: pino.Logger<"success">): Logger {
-  return {
-    info(msg) {
-      pinoLogger.info(msg);
-    },
-    warn(msg) {
-      pinoLogger.warn(msg);
-    },
-    error(msg) {
-      pinoLogger.error(msg);
-    },
-    success(msg) {
-      pinoLogger.success(msg);
-    },
-    trace(msg) {
-      pinoLogger.trace(msg);
-    },
-    child(bindings) {
-      return wrapPino(pinoLogger.child(bindings));
-    },
-  };
-}
-
 export function createLogger(logDir: string): Logger {
   mkdirSync(logDir, { recursive: true });
 
@@ -126,5 +96,5 @@ export function createLogger(logDir: string): Logger {
     streams,
   );
 
-  return wrapPino(pinoLogger);
+  return pinoLogger;
 }
