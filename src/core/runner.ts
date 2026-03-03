@@ -30,6 +30,20 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+export function resolveTicketRepo(
+  ticket: TicketState,
+  plan: { repo: string | null } | null,
+): TicketState {
+  if (ticket.repo) return ticket;
+  const resolved = plan?.repo ?? null;
+  if (!resolved) {
+    throw new Error(
+      `Ticket "${ticket.ticketId}" has no repo and plan "${ticket.planId}" has no default repo`,
+    );
+  }
+  return { ...ticket, repo: resolved };
+}
+
 export function createRunner(config: OrchestratorConfig): Runner {
   const stateManager = createStateManager(config.stateDir);
   const workflowLoader = createWorkflowLoader(config.workflowSearchPath);
@@ -44,6 +58,9 @@ export function createRunner(config: OrchestratorConfig): Runner {
   ): Promise<{ ticket: TicketState; pendingPoll: boolean }> {
     const plan = await stateManager.getPlan(ticket.planId);
     const planAgent = plan?.agent ?? null;
+
+    // Resolve ticket repo from plan if not set on the ticket
+    const resolved = resolveTicketRepo(ticket, plan);
 
     const phase = await workflowLoader.getPhase(
       ticket.workflow,
@@ -73,7 +90,7 @@ export function createRunner(config: OrchestratorConfig): Runner {
 
     let result: PhaseResult;
     try {
-      result = await phaseExecutor.execute(phase, ticket, planAgent);
+      result = await phaseExecutor.execute(phase, resolved, planAgent);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       logger.phaseEnd(ticket.currentPhase, ticket.ticketId, "failure");

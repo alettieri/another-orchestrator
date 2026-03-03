@@ -178,6 +178,22 @@ describe("PlanFileSchema", () => {
       PlanFileSchema.parse({ ...validPlan, status: "invalid" }),
     ).toThrow();
   });
+
+  it("defaults repo to null when omitted", () => {
+    const { repo, ...withoutRepo } = validPlan;
+    const result = PlanFileSchema.parse(withoutRepo);
+    expect(result.repo).toBeNull();
+  });
+
+  it("accepts explicit null repo for multi-repo plans", () => {
+    const result = PlanFileSchema.parse({ ...validPlan, repo: null });
+    expect(result.repo).toBeNull();
+  });
+
+  it("accepts a string repo for single-repo plans", () => {
+    const result = PlanFileSchema.parse(validPlan);
+    expect(result.repo).toBe("my-repo");
+  });
 });
 
 describe("WorkflowDefinitionSchema", () => {

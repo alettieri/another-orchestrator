@@ -220,6 +220,83 @@ describe("StateManager", () => {
     });
   });
 
+  describe("multi-repo plans", () => {
+    it("saves and retrieves a plan with null repo", async () => {
+      const sm = createStateManager(stateDir);
+      const plan = makePlan({ repo: null });
+      await sm.savePlan(plan);
+
+      const retrieved = await sm.getPlan("plan-1");
+      expect(retrieved).not.toBeNull();
+      expect(retrieved?.repo).toBeNull();
+    });
+
+    it("handles tickets with different repos in the same plan", async () => {
+      const sm = createStateManager(stateDir);
+      await sm.savePlan(makePlan({ repo: null }));
+      await sm.saveTicket(
+        makeTicket({ ticketId: "t-1", repo: "/repos/backend" }),
+      );
+      await sm.saveTicket(
+        makeTicket({ ticketId: "t-2", repo: "/repos/frontend" }),
+      );
+
+      const tickets = await sm.listTickets("plan-1");
+      expect(tickets).toHaveLength(2);
+
+      const repos = tickets.map((t) => t.repo).sort();
+      expect(repos).toEqual(["/repos/backend", "/repos/frontend"]);
+    });
+
+    it("resolves cross-repo dependencies within a plan", async () => {
+      const sm = createStateManager(stateDir);
+      await sm.savePlan(makePlan({ repo: null }));
+      await sm.saveTicket(
+        makeTicket({
+          ticketId: "t-1",
+          repo: "/repos/backend",
+          status: "complete",
+        }),
+      );
+      await sm.saveTicket(
+        makeTicket({
+          ticketId: "t-2",
+          repo: "/repos/frontend",
+          status: "queued",
+        }),
+      );
+
+      await sm.resolveDependencies("plan-1");
+
+      const ticket = await sm.getTicket("plan-1", "t-2");
+      expect(ticket?.status).toBe("ready");
+    });
+
+    it("getReadyTickets works with cross-repo tickets", async () => {
+      const sm = createStateManager(stateDir);
+      await sm.savePlan(makePlan({ repo: null }));
+      await sm.saveTicket(
+        makeTicket({
+          ticketId: "t-1",
+          repo: "/repos/backend",
+          status: "complete",
+        }),
+      );
+      await sm.saveTicket(
+        makeTicket({
+          ticketId: "t-2",
+          repo: "/repos/frontend",
+          status: "ready",
+        }),
+      );
+
+      const ready = await sm.getReadyTickets();
+      expect(ready).toHaveLength(1);
+      expect(ready[0].ticketId).toBe("t-2");
+      expect(ready[0].repo).toBe("/repos/frontend");
+    });
+  });
+
   describe("corrupted files", () => {
     it("returns null for corrupted plan file", async () => {
       const sm = createStateManager(stateDir);

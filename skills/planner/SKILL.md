@@ -66,7 +66,7 @@ Each plan is a directory under `<stateDir>/plans/`. The plan metadata lives in `
 | `name` | string | yes | Human-readable name. |
 | `createdAt` | string | yes | ISO 8601 timestamp. |
 | `createdBy` | string | yes | Who created this plan (e.g. `"planner"`). |
-| `repo` | string | yes | Absolute path to the target project repo. |
+| `repo` | string \| null | no | Default repo for tickets. `null` for multi-repo plans where each ticket specifies its own repo. |
 | `workflow` | string | yes | Workflow name (matches the `name` field in a workflow YAML file). |
 | `agent` | string \| null | no | Override default agent for all tickets in this plan. `null` uses the global default from `orchestrator.yaml`. |
 | `worktreeRoot` | string | yes | Absolute path where git worktrees will be created. |
@@ -121,7 +121,7 @@ Each plan is a directory under `<stateDir>/plans/`. The plan metadata lives in `
 | `description` | string | yes | Full description for the coding agent. Include enough context for the agent to implement the feature. |
 | `acceptanceCriteria` | string[] | yes | List of specific, testable criteria. The agent uses these to know when it's done. Defaults to `[]`. |
 | `linearUrl` | string \| null | yes | Link back to the source ticket. `null` if no external source. |
-| `repo` | string | yes | Absolute path to the target repo. Can override the plan-level `repo`. |
+| `repo` | string | yes | Absolute path to the target repo. Overrides the plan-level `repo` when set. Required on every ticket. |
 | `workflow` | string | yes | Workflow name. Can override the plan-level `workflow`. |
 | `branch` | string | yes | Git branch name. Convention: `<username>/<ticket-id>-<short-slug>`. |
 | `worktree` | string | yes | Absolute path for the git worktree. Convention: `<worktreeRoot>/<ticketId>`. |
@@ -322,6 +322,87 @@ A plan targeting a different repo with different workflows per ticket.
 }
 ```
 
+### Example 4: Multi-Repo Plan (Backend + Frontend)
+
+A plan that orchestrates work across two repositories. The plan-level `repo` is `null` because tickets target different repos.
+
+**Plan file** (`state/plans/cross-repo-auth/plan.json`):
+```json
+{
+  "id": "cross-repo-auth",
+  "name": "Cross-Repo — Auth Overhaul",
+  "createdAt": "2026-03-01T10:00:00Z",
+  "createdBy": "planner",
+  "repo": null,
+  "workflow": "standard",
+  "agent": null,
+  "worktreeRoot": "/Users/sam/worktrees",
+  "status": "active",
+  "tickets": [
+    { "ticketId": "AUTH-1", "order": 1, "blockedBy": [] },
+    { "ticketId": "AUTH-2", "order": 2, "blockedBy": ["AUTH-1"] }
+  ]
+}
+```
+
+**Backend ticket** (`state/plans/cross-repo-auth/tickets/AUTH-1.json`):
+```json
+{
+  "planId": "cross-repo-auth",
+  "ticketId": "AUTH-1",
+  "title": "Add OAuth2 endpoints to backend API",
+  "description": "Implement OAuth2 authorization code flow endpoints...",
+  "acceptanceCriteria": [
+    "GET /api/v1/auth/oauth/authorize redirects to provider",
+    "POST /api/v1/auth/oauth/callback exchanges code for tokens"
+  ],
+  "linearUrl": null,
+  "repo": "/Users/sam/repos/mindbloom-backend",
+  "workflow": "standard",
+  "branch": "sam/auth-1-oauth-endpoints",
+  "worktree": "/Users/sam/worktrees/AUTH-1",
+  "agent": null,
+  "status": "queued",
+  "currentPhase": "setup",
+  "phaseHistory": [],
+  "context": {},
+  "retries": {},
+  "error": null
+}
+```
+
+**Frontend ticket** (`state/plans/cross-repo-auth/tickets/AUTH-2.json`):
+```json
+{
+  "planId": "cross-repo-auth",
+  "ticketId": "AUTH-2",
+  "title": "Add OAuth2 login flow to frontend",
+  "description": "Implement the OAuth2 login button and callback handler in the frontend app...",
+  "acceptanceCriteria": [
+    "Login page shows 'Sign in with OAuth' button",
+    "Callback page exchanges code and stores session"
+  ],
+  "linearUrl": null,
+  "repo": "/Users/sam/repos/mindbloom-frontend",
+  "workflow": "standard",
+  "branch": "sam/auth-2-oauth-frontend",
+  "worktree": "/Users/sam/worktrees/AUTH-2",
+  "agent": null,
+  "status": "queued",
+  "currentPhase": "setup",
+  "phaseHistory": [],
+  "context": {},
+  "retries": {},
+  "error": null
+}
+```
+
+Key points for multi-repo plans:
+- Set plan-level `repo` to `null` when tickets target different repos.
+- Each ticket **must** have its own `repo` set to an absolute path.
+- `blockedBy` works across repos within the same plan — AUTH-2 waits for AUTH-1 even though they target different repos.
+- Each ticket gets its own worktree, branch, and workflow — these are always per-ticket.
+
 ## Naming Conventions
 
 - **Plan IDs**: lowercase, hyphenated slugs. Examples: `sprint-12-backend`, `hotfix-auth`, `mobile-sprint-4`.
@@ -334,7 +415,7 @@ A plan targeting a different repo with different workflows per ticket.
 1. Plan `id` matches the directory name.
 2. All `ticketId` values in the `tickets` array have matching `.json` files in `tickets/`.
 3. `blockedBy` references only ticket IDs that exist in the same plan.
-4. `repo` paths are absolute and point to actual repos.
+4. Every ticket has an absolute `repo` path pointing to an actual repo. Plan-level `repo` is either an absolute path or `null` for multi-repo plans.
 5. `worktreeRoot` is a writable directory.
 6. `workflow` names match actual workflow YAML files in the workflow directory.
 7. All new tickets have `status: "queued"`, `currentPhase` set to the workflow's first phase, and empty `phaseHistory`, `context`, `retries`.
