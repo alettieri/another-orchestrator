@@ -29,8 +29,9 @@ export default function (pi: ExtensionAPI) {
             ...ASCII_ART.map((line) => accent(line)),
             "",
             separator,
-            muted('  "Create a plan for PROJ-101"    "Add codex as an agent"'),
+            muted('  "Create a plan for PROJ-101"    "What CLI commands can I use?"'),
             muted('  "Show me available workflows"  "What repos are in my workspace?"'),
+            muted("  /default-header to restore the default PI header"),
             separator,
           ];
         },

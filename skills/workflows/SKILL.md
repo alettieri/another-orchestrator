@@ -154,6 +154,93 @@ capture:
 - Values are shell commands that are executed and their stdout is captured.
 - The special value `"stdout"` captures the phase's own stdout instead of running a separate command.
 
+## Prompt Templates
+
+Agent phases reference prompt templates via the `promptTemplate` field. These are Nunjucks markdown files that define what the coding agent sees when it runs a phase.
+
+### How Templates Are Resolved
+
+The runner uses a search path to find templates:
+
+1. **Custom prompts directory** (checked first) — `~/.orchestrator/prompts/` by default, or the `promptDir` setting in config
+2. **Bundled prompts** (fallback) — shipped with the package
+
+This means you can override any bundled template by placing a file with the same name in your custom prompts directory. Only the templates you provide are overridden — all others fall back to bundled defaults.
+
+### Bundled Templates
+
+These templates ship with the orchestrator and are used by the `standard` and `bugfix` workflows:
+
+| Template | Used By | Purpose |
+|----------|---------|---------|
+| `implement.md` | standard | Main implementation prompt — build the feature |
+| `implement-bugfix.md` | bugfix | Bug fix variant — reproduce and fix |
+| `self-review.md` | standard | Review own changes for correctness and quality |
+| `simplify.md` | standard | Clean up and simplify the implementation |
+| `verify.md` | bugfix | Run linting, type checking, and tests |
+| `create-pr.md` | standard, bugfix | Create a GitHub pull request |
+| `handle-review.md` | standard, bugfix | Address PR review feedback and CI failures |
+
+### Creating Custom Templates for New Workflows
+
+When building a custom workflow, you can write your own prompt templates:
+
+1. Create the template file in `~/.orchestrator/prompts/`:
+   ```sh
+   mkdir -p ~/.orchestrator/prompts
+   ```
+
+2. Write a Nunjucks markdown file. Use `{{ variable }}` for template variables:
+   ```markdown
+   # Security Audit
+
+   Review the code in `{{ worktree }}` for security vulnerabilities.
+
+   ## Ticket
+   **{{ ticketId }}**: {{ title }}
+
+   {{ description }}
+
+   {% if acceptance_criteria_list %}
+   ## Criteria
+   {{ acceptance_criteria_list }}
+   {% endif %}
+   ```
+
+3. Reference it in your workflow YAML:
+   ```yaml
+   - id: security_audit
+     type: agent
+     promptTemplate: security-audit.md
+     allowedTools: ["Read", "Grep", "Glob"]
+     maxTurns: 30
+     onSuccess: complete
+     onFailure: abort
+   ```
+
+### Overriding Bundled Templates
+
+To customize how the standard workflow implements features without changing the workflow YAML:
+
+```sh
+# Copy the bundled template
+cp $ORCHESTRATOR_PROMPT_DIR/implement.md ~/.orchestrator/prompts/implement.md
+# Edit it
+```
+
+The runner will pick up your version automatically on the next run.
+
+### Template Syntax
+
+Templates use [Nunjucks](https://mozilla.github.io/nunjucks/) syntax:
+
+- **Variables**: `{{ ticketId }}`, `{{ description }}`, `{{ pr_url }}`
+- **Conditionals**: `{% if linearUrl %}Linear: {{ linearUrl }}{% endif %}`
+- **Loops**: `{% for item in acceptanceCriteria %}- {{ item }}\n{% endfor %}`
+- **Filters**: `{{ title | upper }}`
+
+Missing variables render as empty strings — they never throw errors. All ticket fields and context variables captured by previous phases are available (see **Template Variables** above).
+
 ## Transitions
 
 ### Success and Failure

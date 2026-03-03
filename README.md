@@ -20,30 +20,47 @@ The `state/plans/` directory is the only interface between the two. The planner 
 - A coding agent CLI: **claude** (Claude Code) and/or **codex** (OpenAI Codex)
 - The PI coding agent (`@mariozechner/pi-coding-agent`) is installed automatically as a dependency
 
-## Quick Start
+## Getting Started
+
+### Installation
 
 ```sh
-# Clone and install
 git clone <repo-url> && cd another-orchestrator
 nvm use
 pnpm install
-
-# Build and link globally
 pnpm run build
 pnpm link --global
-
-# One-time setup — creates ~/.orchestrator/ with config, state, and logs dirs
 orchestrator init
+```
 
-# Launch interactive planning session from your workspace
+### The Interactive Agent
+
+The primary interface is `orchestrator interactive`. It launches an LLM-powered planning session (PI) where you describe what you want done in natural language. The agent knows how to create plans, manage configuration, explore your workspace, author workflows, and connect to project management tools like Linear or GitHub Issues.
+
+Run it from your workspace directory (the root where your repos live):
+
+```sh
 cd ~/workspace
 orchestrator interactive
+```
 
-# Start the daemon to process tickets (works from any directory)
+The agent writes plan and ticket state files that the execution engine consumes. You don't need to edit JSON by hand -- the agent handles it.
+
+### Running Work
+
+Once you have a plan, start the daemon to process tickets automatically:
+
+```sh
 orchestrator daemon
+```
 
-# Check status (works from any directory)
-orchestrator status
+The daemon reads state files, walks YAML workflow phases, and dispatches headless coding agents in isolated git worktrees. It runs continuously until stopped with Ctrl+C.
+
+### Checking Status
+
+```sh
+orchestrator status                  # overview of all plans
+orchestrator status --plan <id>      # detailed view of one plan
 ```
 
 ## CLI Reference
@@ -152,6 +169,7 @@ prompts/                      # Nunjucks templates for agent phases
   interactive-system.md       # System prompt for PI interactive sessions
 scripts/                      # Bash scripts for infrastructure phases
 skills/                       # Agent Skills documentation
+  cli/SKILL.md                # CLI command reference for interactive sessions
   config/SKILL.md             # Config file reference for interactive sessions
   planner/SKILL.md            # Plan/ticket JSON schemas + examples
   workflows/SKILL.md          # Workflow authoring guide
