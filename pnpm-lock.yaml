@@ -48,6 +48,9 @@ importers:
       '@types/nunjucks':
         specifier: ^3.2.6
         version: 3.2.6
+      '@types/pino-pretty':
+        specifier: ^5.0.0
+        version: 5.0.0
       tsx:
         specifier: ^4.19.3
         version: 4.21.0
@@ -938,6 +941,10 @@ packages:
 
   '@types/nunjucks@3.2.6':
     resolution: {integrity: sha512-pHiGtf83na1nCzliuAdq8GowYiXvH5l931xZ0YEHaLMNFgynpEqx+IPStlu7UaDkehfvl01e4x/9Tpwhy7Ue3w==}
+
+  '@types/pino-pretty@5.0.0':
+    resolution: {integrity: sha512-N1uzqSzioqz8R3AkDbSJwcfDWeI3YMPNapSQQhnB2ISU4NYgUIcAh+hYT5ygqBM+klX4htpEhXMmoJv3J7GrdA==}
+    deprecated: This is a stub types definition. pino-pretty provides its own type definitions, so you do not need this installed.
 
   '@types/retry@0.12.0':
     resolution: {integrity: sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA==}
@@ -2983,6 +2990,10 @@ snapshots:
       undici-types: 6.21.0
 
   '@types/nunjucks@3.2.6': {}
+
+  '@types/pino-pretty@5.0.0':
+    dependencies:
+      pino-pretty: 13.1.3
 
   '@types/retry@0.12.0': {}
 
