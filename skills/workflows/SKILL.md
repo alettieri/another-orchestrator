@@ -10,13 +10,13 @@ This skill teaches you how to create and register custom YAML workflows for the 
 
 Workflows are YAML files that define a directed graph of phases. The runner walks this graph deterministically — it never makes judgment calls. Every transition is explicit in the YAML.
 
-Workflow files live in `workflows/`. The runner discovers them automatically by scanning `*.yaml` files in the workflow directories.
+The runner discovers workflows automatically by scanning `*.yaml` files in the workflow directory. The location of this directory is controlled by the `workflowDir` setting in the orchestrator config file (default: the `workflows/` directory bundled with the package). During interactive sessions, the resolved path is available as `$ORCHESTRATOR_WORKFLOW_DIR`. See the **Config Skill** (`skills/config/SKILL.md`) for how the config file is found and how directory paths are resolved.
 
 ## Phase Types
 
 ### Script
 
-Runs a bash script from the orchestrator's `scripts/` directory. Use for deterministic infrastructure operations that don't need an LLM.
+Runs a bash script from the orchestrator's scripts directory (configured via `scriptDir` in the config file, default: bundled `scripts/`). Use for deterministic infrastructure operations that don't need an LLM.
 
 ```yaml
 - id: setup
@@ -39,7 +39,7 @@ Runs a bash script from the orchestrator's `scripts/` directory. Use for determi
 
 ### Agent
 
-Invokes a headless coding agent with a rendered prompt template. The agent runs in the ticket's worktree.
+Invokes a headless coding agent with a rendered prompt template. The agent runs in the ticket's worktree. Prompt templates are loaded from the prompts directory (configured via `promptDir` in the config file). By default, custom templates in `~/.orchestrator/prompts/` are checked first, falling back to bundled defaults. See the **Config Skill** (`skills/config/SKILL.md`) for details.
 
 ```yaml
 - id: implement
@@ -228,9 +228,9 @@ phases:
 
 ## How to Add a New Workflow
 
-1. Create `workflows/<name>.yaml` with the workflow definition (include `name`, `description`, `tags`, and `phases`).
-2. Create any new prompt templates referenced by agent phases in `prompts/`.
-3. Create any new scripts referenced by script or poll phases in `scripts/`.
+1. Create a new `.yaml` file in the workflow directory with the workflow definition (include `name`, `description`, `tags`, and `phases`). The workflow directory is `$ORCHESTRATOR_WORKFLOW_DIR` during interactive sessions, or the `workflowDir` path from the config file. To find the current locations, read `$ORCHESTRATOR_CONFIG_PATH` or see the **Config Skill** (`skills/config/SKILL.md`).
+2. Create any new prompt templates referenced by agent phases in the prompts directory (`$ORCHESTRATOR_PROMPT_DIR`, or drop them into `~/.orchestrator/prompts/` for automatic pickup).
+3. Create any new scripts referenced by script or poll phases in the scripts directory (`$ORCHESTRATOR_SCRIPT_DIR`).
 4. Test by creating a plan that uses the new workflow and running `orchestrator run <planId> <ticketId>`.
 
 The workflow is automatically discovered — no separate registration step is needed. The `name` field in the YAML is used as the workflow identifier.
@@ -332,4 +332,4 @@ phases:
     notify: true
 ```
 
-Save this as `workflows/review-only.yaml` — it will be automatically discovered by the runner.
+Save this in the workflow directory (e.g., `$ORCHESTRATOR_WORKFLOW_DIR/review-only.yaml`) — it will be automatically discovered by the runner.

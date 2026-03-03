@@ -17,8 +17,10 @@ The only interface between you and the runner is the `state/` directory. You wri
 
 ## State Directory Structure
 
+The state directory location is controlled by the `stateDir` setting in the orchestrator config file. During interactive sessions, the resolved path is available as `$ORCHESTRATOR_STATE_DIR`. To understand how the config file is found and what other directories are configurable, see the **Config Skill** (`skills/config/SKILL.md`).
+
 ```
-state/plans/
+<stateDir>/plans/
 ├── sprint-12-backend/
 │   ├── plan.json                  ← plan metadata + ticket list
 │   └── tickets/
@@ -31,7 +33,9 @@ state/plans/
 │       └── PROJ-200.json
 ```
 
-Each plan is a directory under `state/plans/`. The plan metadata lives in `plan.json`. Each ticket gets its own file under `tickets/`.
+By default, `stateDir` resolves to `~/.orchestrator/state` (created by `orchestrator init`). If overridden in config, it is resolved relative to the config file location.
+
+Each plan is a directory under `<stateDir>/plans/`. The plan metadata lives in `plan.json`. Each ticket gets its own file under `tickets/`.
 
 ## Plan File Schema (`plan.json`)
 
@@ -143,7 +147,7 @@ Dependencies are defined in the plan's `tickets[].blockedBy` array:
 
 ## Workflow Selection
 
-Available workflows are discovered automatically from `*.yaml` files in the workflow directories. List the files in `$ORCHESTRATOR_WORKFLOW_DIR` to see what's available.
+Available workflows are discovered automatically from `*.yaml` files in the workflow directory. The workflow directory location is controlled by the `workflowDir` setting in the config file (default: bundled with the package). During interactive sessions, the resolved path is available as `$ORCHESTRATOR_WORKFLOW_DIR` — list the files there to see what's available. See the **Config Skill** (`skills/config/SKILL.md`) for how directory paths are resolved.
 
 Common choices:
 - `standard` — Full feature workflow: setup, implement, self-review, simplify, verify, create PR, review cycle, merge, cleanup.
@@ -157,11 +161,11 @@ The agent provider is resolved with a four-level priority chain:
 1. **Phase-level** — defined in the workflow YAML
 2. **Ticket-level** — the ticket's `agent` field
 3. **Plan-level** — the plan's `agent` field
-4. **Global default** — `defaultAgent` in `orchestrator.yaml`
+4. **Global default** — `defaultAgent` in the config file
 
 Set `agent` to `null` at the plan or ticket level to inherit from the next level up.
 
-Available agents are defined in `orchestrator.yaml` under the `agents` key. Typical options: `claude`, `codex`.
+Available agents are defined in the config file under the `agents` key. To see the current config (including which agents are available and what the default is), read `$ORCHESTRATOR_CONFIG_PATH` or see the **Config Skill** (`skills/config/SKILL.md`) for the full schema.
 
 ## CLI Commands
 

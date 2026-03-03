@@ -102,6 +102,11 @@ export function register(
             "extensions",
             "question.ts",
           );
+          const packageDir = resolve(
+            dirname(fileURLToPath(import.meta.url)),
+            "../..",
+          );
+          const bannerExtPath = join(packageDir, "extensions", "banner.ts");
           const piArgs = [
             ...agentConfig.defaultArgs,
             "--skill",
@@ -110,6 +115,8 @@ export function register(
             systemPromptPath,
             "--extension",
             questionExtPath,
+            "--extension",
+            bannerExtPath,
           ];
           await runPiInteractive({
             args: piArgs,
