@@ -4,6 +4,20 @@ import { spawnInteractive } from "../agents/interactive.js";
 import type { LoadConfigOptions } from "../core/config.js";
 import { loadConfig } from "../core/config.js";
 import { createStateManager } from "../core/state.js";
+import type { PhaseHistoryEntry, TicketState } from "../core/types.js";
+
+const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+function getClaudeSessions(
+  ticket: TicketState,
+  phase?: string,
+): PhaseHistoryEntry[] {
+  let sessions = ticket.phaseHistory.filter((h) => h.sessionId);
+  if (phase) {
+    sessions = sessions.filter((h) => h.phase === phase);
+  }
+  return sessions;
+}
 
 export function register(
   program: Command,
@@ -32,11 +46,7 @@ export function register(
           return;
         }
 
-        let sessions = ticket.phaseHistory.filter((h) => h.sessionId);
-
-        if (opts.phase) {
-          sessions = sessions.filter((h) => h.phase === opts.phase);
-        }
+        const sessions = getClaudeSessions(ticket, opts.phase);
 
         if (sessions.length === 0) {
           console.log("No Claude sessions found for this ticket.");
@@ -103,10 +113,7 @@ export function register(
         let sessionId = sessionIdArg;
 
         if (!sessionId) {
-          let sessions = ticket.phaseHistory.filter((h) => h.sessionId);
-          if (opts.phase) {
-            sessions = sessions.filter((h) => h.phase === opts.phase);
-          }
+          const sessions = getClaudeSessions(ticket, opts.phase);
           const latest = sessions[sessions.length - 1];
           sessionId = latest?.sessionId;
         }
@@ -115,6 +122,16 @@ export function register(
           console.error(
             chalk.red(
               "No session ID found. Provide one explicitly or check the ticket has Claude sessions.",
+            ),
+          );
+          process.exitCode = 1;
+          return;
+        }
+
+        if (!SESSION_ID_PATTERN.test(sessionId)) {
+          console.error(
+            chalk.red(
+              "Invalid session ID format. Expected alphanumeric characters, hyphens, or underscores.",
             ),
           );
           process.exitCode = 1;
