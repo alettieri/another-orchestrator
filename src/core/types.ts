@@ -104,6 +104,7 @@ export const PhaseHistoryEntrySchema = z.object({
   startedAt: z.string(),
   completedAt: z.string().nullable(),
   output: z.string().optional(),
+  sessionId: z.string().optional(),
 });
 
 export type PhaseHistoryEntry = z.infer<typeof PhaseHistoryEntrySchema>;

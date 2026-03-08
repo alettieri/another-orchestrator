@@ -200,12 +200,19 @@ export function createRunner(config: OrchestratorConfig): Runner {
       log.error(`Phase "${ticket.currentPhase}" failed (${durationMs}ms)`);
     }
 
+    if (result.sessionId) {
+      log.info(
+        `Phase "${ticket.currentPhase}" Claude session: ${result.sessionId}`,
+      );
+    }
+
     const historyEntry = {
       phase: ticket.currentPhase,
       status: (result.success ? "success" : "failure") as "success" | "failure",
       startedAt,
       completedAt,
       output: result.output.slice(0, 4096),
+      sessionId: result.sessionId,
     };
 
     // Merge captured values into context

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildAgentArgs, invokeAgent } from "./invoke.js";
+import {
+  buildAgentArgs,
+  invokeAgent,
+  parseClaudeJsonOutput,
+} from "./invoke.js";
 
 describe("buildAgentArgs", () => {
   it("builds args for claude agent", () => {
@@ -13,7 +17,7 @@ describe("buildAgentArgs", () => {
       "-p",
       "fix the bug",
       "--output-format",
-      "text",
+      "json",
       "--verbose",
     ]);
   });
@@ -57,6 +61,39 @@ describe("buildAgentArgs", () => {
 
     expect(result.command).toBe("my-agent");
     expect(result.args).toEqual(["hello", "--flag"]);
+  });
+});
+
+describe("parseClaudeJsonOutput", () => {
+  it("extracts result and session_id from valid JSON", () => {
+    const raw = JSON.stringify({
+      result: "Hello world",
+      session_id: "abc-123",
+    });
+    const parsed = parseClaudeJsonOutput(raw);
+    expect(parsed.text).toBe("Hello world");
+    expect(parsed.sessionId).toBe("abc-123");
+  });
+
+  it("extracts result without session_id", () => {
+    const raw = JSON.stringify({ result: "Some output" });
+    const parsed = parseClaudeJsonOutput(raw);
+    expect(parsed.text).toBe("Some output");
+    expect(parsed.sessionId).toBeUndefined();
+  });
+
+  it("falls back to raw string on invalid JSON", () => {
+    const raw = "not valid json";
+    const parsed = parseClaudeJsonOutput(raw);
+    expect(parsed.text).toBe("not valid json");
+    expect(parsed.sessionId).toBeUndefined();
+  });
+
+  it("falls back to raw string when result field is missing", () => {
+    const raw = JSON.stringify({ session_id: "abc-123", other: "data" });
+    const parsed = parseClaudeJsonOutput(raw);
+    expect(parsed.text).toBe(raw);
+    expect(parsed.sessionId).toBe("abc-123");
   });
 });
 

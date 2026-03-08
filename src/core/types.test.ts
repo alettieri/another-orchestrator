@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AgentConfigSchema,
   OrchestratorConfigSchema,
+  PhaseHistoryEntrySchema,
   PlanFileSchema,
   RawOrchestratorConfigSchema,
   TicketStatusSchema,
@@ -193,6 +194,29 @@ describe("PlanFileSchema", () => {
   it("accepts a string repo for single-repo plans", () => {
     const result = PlanFileSchema.parse(validPlan);
     expect(result.repo).toBe("my-repo");
+  });
+});
+
+describe("PhaseHistoryEntrySchema", () => {
+  it("parses entry without sessionId", () => {
+    const result = PhaseHistoryEntrySchema.parse({
+      phase: "implement",
+      status: "success",
+      startedAt: "2025-01-01T00:00:00Z",
+      completedAt: "2025-01-01T00:05:00Z",
+    });
+    expect(result.sessionId).toBeUndefined();
+  });
+
+  it("parses entry with sessionId", () => {
+    const result = PhaseHistoryEntrySchema.parse({
+      phase: "implement",
+      status: "success",
+      startedAt: "2025-01-01T00:00:00Z",
+      completedAt: "2025-01-01T00:05:00Z",
+      sessionId: "cc807f8c-1234-5678-abcd-ef0123456789",
+    });
+    expect(result.sessionId).toBe("cc807f8c-1234-5678-abcd-ef0123456789");
   });
 });
 

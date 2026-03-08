@@ -5,6 +5,7 @@ import { Command } from "commander";
 import { register as registerInit } from "./commands/init.js";
 import { register as registerInteractive } from "./commands/interactive.js";
 import { register as registerRun } from "./commands/run.js";
+import { register as registerSessions } from "./commands/sessions.js";
 import { register as registerStatus } from "./commands/status.js";
 import { register as registerTickets } from "./commands/tickets.js";
 import type { LoadConfigOptions } from "./core/config.js";
@@ -27,6 +28,7 @@ registerInit(program, getConfigOptions);
 registerStatus(program, getConfigOptions);
 registerRun(program, getConfigOptions);
 registerTickets(program, getConfigOptions);
+registerSessions(program, getConfigOptions);
 registerInteractive(program, getConfigOptions);
 
 program.parse();

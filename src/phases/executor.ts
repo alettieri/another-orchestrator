@@ -18,6 +18,7 @@ export interface PhaseResult {
   captured: Record<string, string>;
   nextPhase: string | null;
   pending?: boolean;
+  sessionId?: string;
 }
 
 export interface PhaseExecutor {
@@ -164,6 +165,7 @@ export function createPhaseExecutor(
       output: agentResult.stdout,
       captured,
       nextPhase,
+      sessionId: agentResult.sessionId,
     };
   }
 

@@ -65,6 +65,14 @@ async function printTicketDetail(
   if (ticket.context.pr_url) {
     console.log(`    PR: ${chalk.dim(ticket.context.pr_url)}`);
   }
+
+  const sessionsWithId = ticket.phaseHistory.filter((h) => h.sessionId);
+  if (sessionsWithId.length > 0) {
+    const latest = sessionsWithId[sessionsWithId.length - 1];
+    console.log(
+      `    Session: ${chalk.dim(latest.sessionId)} ${chalk.dim(`(${latest.phase})`)}`,
+    );
+  }
 }
 
 export function register(
