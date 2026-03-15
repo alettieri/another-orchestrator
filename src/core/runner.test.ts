@@ -20,7 +20,6 @@ describe("runner", () => {
   let scriptDir: string;
   let promptDir: string;
   let logDir: string;
-  let lockPath: string;
   let config: OrchestratorConfig;
 
   const minimalYaml = `
@@ -114,7 +113,6 @@ phases:
     scriptDir = join(tmpDir, "scripts");
     promptDir = join(tmpDir, "prompts");
     logDir = join(tmpDir, "logs");
-    lockPath = join(tmpDir, "daemon.pid");
     await mkdir(stateDir, { recursive: true });
     await mkdir(workflowDir, { recursive: true });
     await mkdir(scriptDir, { recursive: true });
