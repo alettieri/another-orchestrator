@@ -62,6 +62,7 @@ describe("executor", () => {
       agents: {
         claude: { command: "claude", defaultArgs: [] },
       },
+      orchestratorHome: tmpDir,
       stateDir: join(tmpDir, "state"),
       logDir: join(tmpDir, "logs"),
       workflowDir: join(tmpDir, "workflows"),

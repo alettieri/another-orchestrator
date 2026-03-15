@@ -2,7 +2,7 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import type { LoadConfigOptions } from "../core/config.js";
 import { loadConfig } from "../core/config.js";
-import { createRunner } from "../core/runner.js";
+import { createRunner, DaemonAlreadyRunningError } from "../core/runner.js";
 import { colorStatus } from "./status.js";
 
 export function register(
@@ -69,15 +69,21 @@ export function register(
       process.on("SIGINT", shutdown);
       process.on("SIGTERM", shutdown);
 
-      console.log(chalk.bold("Daemon started"));
-
       const runner = createRunner(config);
       try {
         await runner.startDaemon({ signal: controller.signal });
       } catch (err) {
+        if (err instanceof DaemonAlreadyRunningError) {
+          console.log(chalk.yellow(err.message));
+          process.exitCode = 0;
+          return;
+        }
         const msg = err instanceof Error ? err.message : String(err);
         console.error(chalk.red(`Daemon error: ${msg}`));
         process.exitCode = 1;
+      } finally {
+        process.off("SIGINT", shutdown);
+        process.off("SIGTERM", shutdown);
       }
 
       console.log(chalk.bold("Daemon stopped"));

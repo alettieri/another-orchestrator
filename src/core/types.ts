@@ -39,6 +39,7 @@ export type RawOrchestratorConfig = z.infer<typeof RawOrchestratorConfigSchema>;
 export const OrchestratorConfigSchema = z.object({
   defaultAgent: z.string(),
   agents: z.record(z.string(), AgentConfigSchema),
+  orchestratorHome: z.string(),
   stateDir: z.string(),
   logDir: z.string(),
   workflowDir: z.string(),

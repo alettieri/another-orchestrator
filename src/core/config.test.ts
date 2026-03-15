@@ -121,6 +121,7 @@ describe("loadConfig", () => {
 
     const config = await loadConfig({ configPath, packageDir: pkgDir });
     expect(config.defaultAgent).toBe("claude");
+    expect(config.orchestratorHome).toBe(resolveOrchestratorHome());
     expect(config.pollInterval).toBe(10);
     expect(config.maxConcurrency).toBe(3);
   });
@@ -170,6 +171,7 @@ describe("loadConfig", () => {
     const config = await loadConfig({ configPath, packageDir: pkgDir });
 
     // User data dirs default to home
+    expect(config.orchestratorHome).toBe(join(tmpDir, "home"));
     expect(config.stateDir).toBe(join(tmpDir, "home", "state"));
     expect(config.logDir).toBe(join(tmpDir, "home", "logs"));
 
@@ -229,6 +231,7 @@ describe("resolveAgent", () => {
       claude: { command: "claude", defaultArgs: [] },
       codex: { command: "codex", defaultArgs: [] },
     },
+    orchestratorHome: "/tmp/orchestrator",
     stateDir: "/tmp/state",
     logDir: "/tmp/logs",
     workflowDir: "/tmp/workflows",
