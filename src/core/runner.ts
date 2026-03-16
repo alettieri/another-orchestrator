@@ -38,8 +38,11 @@ const defaultProcessInspector: ProcessInspector = {
       return true;
     } catch (error) {
       if (error && typeof error === "object" && "code" in error) {
+        // ESRCH means the process no longer exists. Other errors such as
+        // EPERM still indicate a live process that we cannot signal.
         return error.code !== "ESRCH";
       }
+
       return true;
     }
   },

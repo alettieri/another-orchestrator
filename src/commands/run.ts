@@ -85,7 +85,6 @@ export function register(
         process.off("SIGINT", shutdown);
         process.off("SIGTERM", shutdown);
       }
-      process.exit(process.exitCode ?? 0);
     });
 
   program
