@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as shell from "../utils/shell.js";
 import {
   buildAgentArgs,
   invokeAgent,
@@ -31,16 +32,6 @@ describe("buildAgentArgs", () => {
     expect(result.args).toContain("--allowedTools");
     expect(result.args).toContain("Read");
     expect(result.args).toContain("Write");
-  });
-
-  it("includes maxTurns for claude", () => {
-    const result = buildAgentArgs(
-      { command: "claude", defaultArgs: [] },
-      { prompt: "do stuff", maxTurns: 5 },
-    );
-
-    expect(result.args).toContain("--max-turns");
-    expect(result.args).toContain("5");
   });
 
   it("builds args for codex agent", () => {
@@ -132,5 +123,47 @@ describe("invokeAgent", () => {
     expect(result.success).toBe(true);
     expect(chunks.length).toBeGreaterThan(0);
     expect(chunks.join("").trim()).toBe("streamed output");
+  });
+
+  describe("timeout handling", () => {
+    let spy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      spy = vi.spyOn(shell, "execCommandStreaming").mockResolvedValue({
+        stdout: "ok",
+        stderr: "",
+        exitCode: 0,
+      });
+    });
+
+    afterEach(() => {
+      spy.mockRestore();
+    });
+
+    it("passes custom timeoutMs to execCommandStreaming", async () => {
+      await invokeAgent(
+        { command: "echo", defaultArgs: [] },
+        { prompt: "hello", timeoutMs: 120000 },
+      );
+
+      expect(spy).toHaveBeenCalledWith(
+        "echo",
+        ["hello"],
+        expect.objectContaining({ timeoutMs: 120000 }),
+      );
+    });
+
+    it("uses DEFAULT_TIMEOUT_MS when timeoutMs is not provided", async () => {
+      await invokeAgent(
+        { command: "echo", defaultArgs: [] },
+        { prompt: "hello" },
+      );
+
+      expect(spy).toHaveBeenCalledWith(
+        "echo",
+        ["hello"],
+        expect.objectContaining({ timeoutMs: 60 * 60 * 1000 }),
+      );
+    });
   });
 });

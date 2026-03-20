@@ -5,7 +5,7 @@ export interface AgentInvocation {
   prompt: string;
   cwd?: string;
   allowedTools?: string[];
-  maxTurns?: number;
+  timeoutMs?: number;
 }
 
 export interface AgentResult {
@@ -20,22 +20,19 @@ export interface AgentCallbacks {
   onOutput?: (chunk: string) => void;
 }
 
-const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 
 export function buildAgentArgs(
   agentConfig: AgentConfig,
   invocation: AgentInvocation,
 ): { command: string; args: string[] } {
   const { command, defaultArgs } = agentConfig;
-  const { prompt, allowedTools, maxTurns } = invocation;
+  const { prompt, allowedTools } = invocation;
 
   if (command === "claude") {
     const args = ["-p", prompt, "--output-format", "json", ...defaultArgs];
     if (allowedTools?.length) {
       args.push("--allowedTools", ...allowedTools);
-    }
-    if (maxTurns !== undefined) {
-      args.push("--max-turns", String(maxTurns));
     }
     return { command, args };
   }
@@ -75,7 +72,7 @@ export async function invokeAgent(
 
   const result = await execCommandStreaming(command, args, {
     cwd: invocation.cwd || undefined,
-    timeoutMs: DEFAULT_TIMEOUT_MS,
+    timeoutMs: invocation.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     onStdout: callbacks?.onOutput,
     signal: options?.signal,
   });

@@ -149,7 +149,9 @@ export function createPhaseExecutor(
         prompt,
         cwd: resolveCwd(ticket),
         allowedTools: phase.allowedTools,
-        maxTurns: phase.maxTurns,
+        timeoutMs: phase.timeoutSeconds
+          ? phase.timeoutSeconds * 1000
+          : undefined,
       },
       {
         onOutput: (chunk) => log.trace(chunk),
