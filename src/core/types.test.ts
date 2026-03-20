@@ -81,6 +81,7 @@ describe("OrchestratorConfigSchema", () => {
     agents: {
       claude: { command: "claude", defaultArgs: [] },
     },
+    orchestratorHome: ".orchestrator",
     stateDir: ".state",
     logDir: ".logs",
     workflowDir: "workflows",
@@ -120,6 +121,11 @@ describe("OrchestratorConfigSchema", () => {
   it("rejects missing skillsDir", () => {
     const { skillsDir, ...withoutSkills } = validConfig;
     expect(() => OrchestratorConfigSchema.parse(withoutSkills)).toThrow();
+  });
+
+  it("rejects missing orchestratorHome", () => {
+    const { orchestratorHome, ...withoutHome } = validConfig;
+    expect(() => OrchestratorConfigSchema.parse(withoutHome)).toThrow();
   });
 });
 

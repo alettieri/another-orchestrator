@@ -1,3 +1,7 @@
+import { execFile as execFileCallback } from "node:child_process";
+import { mkdir, open, readFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { promisify } from "node:util";
 import type { PhaseResult } from "../phases/executor.js";
 import { createPhaseExecutor } from "../phases/executor.js";
 import { createLogger } from "../utils/logger.js";
@@ -5,6 +9,122 @@ import { createStateManager } from "./state.js";
 import { createTemplateRenderer } from "./template.js";
 import type { OrchestratorConfig, TicketState } from "./types.js";
 import { createWorkflowLoader } from "./workflow.js";
+
+const execFile = promisify(execFileCallback);
+const DAEMON_LOCK_FILE = "daemon.pid";
+
+export class DaemonAlreadyRunningError extends Error {
+  constructor(readonly pid: number) {
+    super(
+      `Another orchestrator daemon is already running (PID ${pid}). Stop it before starting a new daemon.`,
+    );
+    this.name = "DaemonAlreadyRunningError";
+  }
+}
+
+export interface ProcessInspector {
+  isRunning(pid: number): Promise<boolean>;
+  describe(pid: number): Promise<string | null>;
+}
+
+export interface RunnerDependencies {
+  processInspector?: ProcessInspector;
+}
+
+const defaultProcessInspector: ProcessInspector = {
+  async isRunning(pid) {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error) {
+        // ESRCH means the process no longer exists. Other errors such as
+        // EPERM still indicate a live process that we cannot signal.
+        return error.code !== "ESRCH";
+      }
+
+      // Unknown errors are treated as "still running" so we do not
+      // accidentally steal a live daemon's lock.
+      return true;
+    }
+  },
+
+  async describe(pid) {
+    try {
+      const { stdout } = await execFile("ps", [
+        "-p",
+        String(pid),
+        "-o",
+        "command=",
+      ]);
+      const command = stdout.trim();
+      return command.length > 0 ? command : null;
+    } catch {
+      return null;
+    }
+  },
+};
+
+async function readLockPid(lockPath: string): Promise<number | null> {
+  try {
+    const trimmed = (await readFile(lockPath, "utf-8")).trim();
+    if (!/^\d+$/.test(trimmed)) {
+      return null;
+    }
+
+    const pid = Number.parseInt(trimmed, 10);
+    return pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+async function acquireDaemonLock(
+  config: OrchestratorConfig,
+  processInspector: ProcessInspector,
+): Promise<string> {
+  const lockPath = join(config.orchestratorHome, DAEMON_LOCK_FILE);
+  await mkdir(config.orchestratorHome, { recursive: true });
+
+  while (true) {
+    try {
+      const handle = await open(lockPath, "wx");
+      try {
+        await handle.writeFile(`${process.pid}\n`);
+      } finally {
+        await handle.close();
+      }
+      return lockPath;
+    } catch (error) {
+      if (!error || typeof error !== "object" || !("code" in error)) {
+        throw error;
+      }
+      if (error.code !== "EEXIST") {
+        throw error;
+      }
+    }
+
+    const existingPid = await readLockPid(lockPath);
+    if (
+      existingPid !== null &&
+      (await processInspector.isRunning(existingPid))
+    ) {
+      const command =
+        (await processInspector.describe(existingPid))?.toLowerCase() ?? "";
+      if (command.includes("orchestrator") && command.includes("daemon")) {
+        throw new DaemonAlreadyRunningError(existingPid);
+      }
+    }
+
+    await rm(lockPath, { force: true });
+  }
+}
+
+async function releaseDaemonLock(lockPath: string): Promise<void> {
+  if ((await readLockPid(lockPath)) === process.pid) {
+    await rm(lockPath, { force: true });
+  }
+}
 
 export interface Runner {
   runSingleTicket(planId: string, ticketId: string): Promise<TicketState>;
@@ -44,12 +164,17 @@ export function resolveTicketRepo(
   return { ...ticket, repo: resolved };
 }
 
-export function createRunner(config: OrchestratorConfig): Runner {
+export function createRunner(
+  config: OrchestratorConfig,
+  dependencies: RunnerDependencies = {},
+): Runner {
   const stateManager = createStateManager(config.stateDir);
   const workflowLoader = createWorkflowLoader(config.workflowSearchPath);
   const templateRenderer = createTemplateRenderer(config.promptSearchPath);
   const logger = createLogger(config.logDir);
   const phaseExecutor = createPhaseExecutor(config, templateRenderer, logger);
+  const processInspector =
+    dependencies.processInspector ?? defaultProcessInspector;
 
   interface InFlightEntry {
     planId: string;
@@ -478,14 +603,19 @@ export function createRunner(config: OrchestratorConfig): Runner {
     },
 
     async startDaemon(options) {
+      const lockPath = await acquireDaemonLock(config, processInspector);
+
       logger.info("Daemon started");
 
-      while (!options?.signal?.aborted) {
-        await this.tick();
-        await sleep(config.pollInterval * 1000, options?.signal);
+      try {
+        while (!options?.signal?.aborted) {
+          await this.tick();
+          await sleep(config.pollInterval * 1000, options?.signal);
+        }
+      } finally {
+        await releaseDaemonLock(lockPath);
+        logger.info("Daemon stopped");
       }
-
-      logger.info("Daemon stopped");
     },
   };
 }

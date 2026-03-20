@@ -8,6 +8,7 @@ const mockConfig: OrchestratorConfig = {
   agents: {
     claude: { command: "claude", defaultArgs: ["--verbose"] },
   },
+  orchestratorHome: "/abs/home",
   stateDir: "/abs/state",
   logDir: "/abs/logs",
   workflowDir: "/abs/workflows",

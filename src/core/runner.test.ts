@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRunner, resolveTicketRepo } from "./runner.js";
 import type { OrchestratorConfig, PlanFile, TicketState } from "./types.js";
 
@@ -113,7 +113,6 @@ phases:
     scriptDir = join(tmpDir, "scripts");
     promptDir = join(tmpDir, "prompts");
     logDir = join(tmpDir, "logs");
-
     await mkdir(stateDir, { recursive: true });
     await mkdir(workflowDir, { recursive: true });
     await mkdir(scriptDir, { recursive: true });
@@ -127,6 +126,7 @@ phases:
       agents: {
         claude: { command: "claude", defaultArgs: [] },
       },
+      orchestratorHome: tmpDir,
       stateDir,
       logDir,
       workflowDir,
@@ -399,6 +399,92 @@ phases:
 
       // Should have stopped within reasonable time (not running indefinitely)
       expect(elapsed).toBeLessThan(5000);
+    });
+
+    it("creates a daemon lockfile on startup and removes it on shutdown", async () => {
+      const runner = createRunner({ ...config, pollInterval: 0.1 });
+      const lockPath = join(config.orchestratorHome, "daemon.pid");
+      const controller = new AbortController();
+      const daemonPromise = runner.startDaemon({ signal: controller.signal });
+
+      await vi.waitFor(async () => {
+        const pid = (await readFile(lockPath, "utf-8")).trim();
+        expect(pid).toBe(String(process.pid));
+      });
+
+      controller.abort();
+      await daemonPromise;
+      await expect(access(lockPath, constants.F_OK)).rejects.toThrow();
+    });
+
+    it("prevents starting a second daemon when a live daemon lock exists", async () => {
+      const lockPath = join(config.orchestratorHome, "daemon.pid");
+      await writeFile(lockPath, "4242\n");
+
+      const runner = createRunner(config, {
+        processInspector: {
+          isRunning: async (pid) => pid === 4242,
+          describe: async (pid) =>
+            pid === 4242 ? "node /usr/local/bin/orchestrator daemon" : null,
+        },
+      });
+
+      await expect(runner.startDaemon()).rejects.toThrow(
+        "Another orchestrator daemon is already running",
+      );
+      expect((await readFile(lockPath, "utf-8")).trim()).toBe("4242");
+    });
+
+    it("replaces a stale daemon lock when the recorded pid is not running", async () => {
+      const lockPath = join(config.orchestratorHome, "daemon.pid");
+      await writeFile(lockPath, "4242\n");
+
+      const runner = createRunner(
+        { ...config, pollInterval: 0.1 },
+        {
+          processInspector: {
+            isRunning: async () => false,
+            describe: async () => null,
+          },
+        },
+      );
+      const controller = new AbortController();
+      const daemonPromise = runner.startDaemon({ signal: controller.signal });
+
+      await vi.waitFor(async () => {
+        const pid = (await readFile(lockPath, "utf-8")).trim();
+        expect(pid).toBe(String(process.pid));
+      });
+
+      controller.abort();
+      await daemonPromise;
+      await expect(access(lockPath, constants.F_OK)).rejects.toThrow();
+    });
+
+    it("replaces a lock when the pid is running but is not an orchestrator daemon", async () => {
+      const lockPath = join(config.orchestratorHome, "daemon.pid");
+      await writeFile(lockPath, "4242\n");
+
+      const runner = createRunner(
+        { ...config, pollInterval: 0.1 },
+        {
+          processInspector: {
+            isRunning: async () => true,
+            describe: async () => "bash -lc sleep 100",
+          },
+        },
+      );
+      const controller = new AbortController();
+      const daemonPromise = runner.startDaemon({ signal: controller.signal });
+
+      await vi.waitFor(async () => {
+        const pid = (await readFile(lockPath, "utf-8")).trim();
+        expect(pid).toBe(String(process.pid));
+      });
+
+      controller.abort();
+      await daemonPromise;
+      await expect(access(lockPath, constants.F_OK)).rejects.toThrow();
     });
   });
 

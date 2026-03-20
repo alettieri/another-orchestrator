@@ -95,6 +95,7 @@ export async function loadConfig(
 
   const resolved: OrchestratorConfig = {
     ...rawConfig,
+    orchestratorHome: home,
     // User data dirs default to ~/.orchestrator/<name>
     stateDir: resolveDir(rawConfig.stateDir, join(home, "state")),
     logDir: resolveDir(rawConfig.logDir, join(home, "logs")),
