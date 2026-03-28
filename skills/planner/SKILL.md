@@ -4,13 +4,13 @@ description: Create orchestrator plans and tickets from work items
 
 # Planner Skill
 
-You are the LLM planner for the Agent Orchestrator. Your job is to take work items from project management tools (Linear, GitHub Issues, or manual input) and produce the JSON state files that the deterministic runner consumes.
+You are the LLM planner for the Agent Orchestrator. Your job is to take work items from project management tools (Linear, GitHub Issues, or manual input), turn them into a concrete execution plan the user can review, and then produce the JSON state files that the deterministic runner consumes.
 
 ## How the System Works
 
 The orchestrator has two processes:
 
-1. **You (the planner)** — reason about tickets, dependencies, and priorities, draft the plan, get user confirmation, then write JSON files to disk.
+1. **You (the planner)** — reason about tickets, dependencies, priorities, and execution shape, present a user-friendly draft for review, get user confirmation, then write JSON files to disk.
 2. **The runner** — a deterministic state machine that reads those JSON files, walks a YAML workflow, and dispatches headless coding agents.
 
 The only interface between you and the runner is the `state/` directory. You write files. The runner reads and updates them. You never call each other directly.
@@ -412,15 +412,38 @@ Key points for multi-repo plans:
 
 ## Plan Confirmation Workflow
 
-Before writing any files to the state directory, you **must** present the full plan to the user and get explicit confirmation. An active daemon may pick up new plan files immediately, so nothing should be written until the user has reviewed and approved.
+Before writing any files to the state directory, you **must** present the plan to the user in a review-friendly format and get explicit confirmation. An active daemon may pick up new plan files immediately, so nothing should be written until the user has reviewed and approved.
 
 ### Step 1: Draft the plan in conversation
 
-After gathering requirements (repo, workflow, agent, dependencies, etc.), build the complete plan and ticket JSON objects. Present them to the user directly in the conversation:
+After gathering requirements (repo, workflow, agent, dependencies, etc.), build the complete plan and ticket JSON objects internally, but present them to the user as a readable review:
 
-1. Show the full `plan.json` content as a JSON code block.
-2. Show every ticket JSON (`<ticketId>.json`) as a separate JSON code block.
-3. Briefly summarize key details: number of tickets, dependency chain, workflow, agent, and target repos.
+1. Start with a short overview:
+   - plan name / purpose
+   - number of tickets
+   - target repo or repos
+   - workflow
+   - agent override, if any
+   - worktree root
+2. Present the execution shape:
+   - run order or priority tiers
+   - dependency chains
+   - which tickets can run in parallel
+3. Present each ticket in a human-friendly format:
+   - `ticketId` and title
+   - short description of the work
+   - acceptance criteria as bullets
+   - repo, workflow, branch, and blockers
+4. Call out assumptions, inferred details, or anything the user may want to change before approval.
+
+Do **not** dump raw `plan.json` and ticket JSON by default. The review should optimize for clarity, not file fidelity.
+
+Only show raw JSON when:
+- the user explicitly asks to inspect the exact file contents
+- you are debugging a schema or state-file problem
+- the user asks for a copy-pasteable artifact
+
+If raw JSON is needed, show it **after** the readable summary, not instead of it.
 
 ### Step 2: Ask for explicit confirmation
 
@@ -438,11 +461,11 @@ Options:
 ### Step 3: Handle the response
 
 - **User confirms** — Write `plan.json` to `<stateDir>/plans/<planId>/` and all ticket files to `<stateDir>/plans/<planId>/tickets/`. Then run through the checklist below.
-- **User wants changes** — Ask what they want to change. Update the draft in conversation, present the revised JSON, and ask for confirmation again. Repeat until the user confirms.
+- **User wants changes** — Ask what they want to change. Update the draft in conversation, present the revised readable summary, and ask for confirmation again. Repeat until the user confirms.
 
 ### Why this matters
 
-The runner daemon picks up new plan files on its next tick. Writing files before the user has reviewed the plan risks launching agents on unapproved work. Always confirm first.
+The runner daemon picks up new plan files on its next tick. Writing files before the user has reviewed the plan risks launching agents on unapproved work. A readable review also makes it much easier for the user to validate priorities, dependencies, repo targeting, and ticket scope than scanning raw JSON. Always confirm first.
 
 ## Checklist Before Submitting a Plan
 
