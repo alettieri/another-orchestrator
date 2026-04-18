@@ -1,5 +1,5 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
 import { buildPlanEnv, spawnInteractive } from "../agents/interactive.js";

@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   findConfigFile,
@@ -52,7 +52,7 @@ describe("findConfigFile", () => {
   let tmpDir: string;
 
   beforeEach(async () => {
-    tmpDir = join(
+    tmpDir = resolve(
       tmpdir(),
       `config-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     );
@@ -101,7 +101,7 @@ describe("loadConfig", () => {
   let pkgDir: string;
 
   beforeEach(async () => {
-    tmpDir = join(
+    tmpDir = resolve(
       tmpdir(),
       `config-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
     );
