@@ -1,0 +1,127 @@
+name: manual-pr
+description: "Like standard but stops before PR creation — waits for you to open the PR, then runs the review cycle."
+tags: [standard, agent, manual-pr]
+
+phases:
+  - id: setup
+    type: script
+    command: setup-worktree.sh
+    args:
+      - "{{ repo }}"
+      - "{{ branch }}"
+      - "{{ worktree }}"
+    capture:
+      worktree: stdout
+    onSuccess: implement
+    onFailure: abort
+
+  - id: implement
+    type: agent
+    promptTemplate: implement.md
+    maxRetries: 1
+    onSuccess: self_review
+    onFailure: escalate
+
+  - id: self_review
+    type: agent
+    promptTemplate: self-review.md
+    allowedTools:
+      - Read
+      - Glob
+      - Grep
+      - Bash
+    maxTurns: 15
+    capture:
+      self_review_feedback: stdout
+    onSuccess: simplify
+    onFailure: implement
+
+  - id: simplify
+    type: agent
+    promptTemplate: simplify.md
+    maxTurns: 20
+    onSuccess: await_pr
+    onFailure: await_pr
+
+  - id: await_pr
+    type: poll
+    command: check-pr-open.sh
+    args:
+      - "{{ repo }}"
+      - "{{ branch }}"
+    intervalSeconds: 60
+    timeoutSeconds: 86400
+    capture:
+      pr_number: stdout
+    onSuccess: await_review
+    onFailure: escalate
+
+  - id: await_review
+    type: poll
+    command: check-pr-review.sh
+    args:
+      - "{{ repo }}"
+      - "{{ context.pr_number }}"
+    intervalSeconds: 60
+    timeoutSeconds: 86400
+    onSuccess: await_merge
+    onFailure: route_review_failure
+
+  - id: route_review_failure
+    type: script
+    command: check-pr-closed.sh
+    args:
+      - "{{ repo }}"
+      - "{{ context.pr_number }}"
+    onSuccess: pr_closed
+    onFailure: handle_review
+
+  - id: handle_review
+    type: agent
+    promptTemplate: handle-review.md
+    maxTurns: 20
+    onSuccess: await_review
+    onFailure: escalate
+
+  - id: await_merge
+    type: poll
+    command: check-pr-merged.sh
+    args:
+      - "{{ repo }}"
+      - "{{ context.pr_number }}"
+    intervalSeconds: 60
+    timeoutSeconds: 86400
+    onSuccess: cleanup
+    onFailure: route_merge_failure
+
+  - id: route_merge_failure
+    type: script
+    command: check-pr-closed.sh
+    args:
+      - "{{ repo }}"
+      - "{{ context.pr_number }}"
+    onSuccess: pr_closed
+    onFailure: escalate
+
+  - id: cleanup
+    type: script
+    command: cleanup-worktree.sh
+    args:
+      - "{{ worktree }}"
+    onSuccess: complete
+    onFailure: complete
+
+  - id: complete
+    type: terminal
+
+  - id: pr_closed
+    type: terminal
+    notify: true
+
+  - id: escalate
+    type: terminal
+    notify: true
+
+  - id: abort
+    type: terminal
+    notify: true

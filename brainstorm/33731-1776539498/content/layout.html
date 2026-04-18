@@ -1,0 +1,122 @@
+<h2>TUI Layout Options</h2>
+<p class="subtitle">How should the TUI be structured?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;background:#0d1117;color:#c9d1d9;padding:12px;border-radius:4px;line-height:1.5">
+        <div style="display:flex;gap:0;height:180px">
+          <div style="width:38%;border-right:1px solid #30363d;padding-right:8px">
+            <div style="color:#58a6ff;margin-bottom:6px">PLANS</div>
+            <div style="color:#3fb950;padding:2px 4px;background:#1c2a1c;border-radius:2px;margin-bottom:2px">● feature-auth</div>
+            <div style="padding:2px 4px;margin-bottom:2px;color:#8b949e">○ bugfix-api</div>
+            <div style="color:#58a6ff;margin-top:8px;margin-bottom:6px">TICKETS</div>
+            <div style="padding:2px 4px;margin-bottom:2px">▶ AUTH-001 running</div>
+            <div style="padding:2px 4px;margin-bottom:2px;color:#8b949e">· AUTH-002 queued</div>
+            <div style="padding:2px 4px;margin-bottom:2px;color:#8b949e">· AUTH-003 queued</div>
+          </div>
+          <div style="flex:1;padding-left:8px">
+            <div style="color:#58a6ff;margin-bottom:6px">AUTH-001 › implement-auth <span style="color:#3fb950">running</span></div>
+            <div style="color:#8b949e;margin-bottom:6px;font-size:10px">phase 2/6 · agent · 3m 12s</div>
+            <div style="color:#c9d1d9;font-size:10px;line-height:1.6;height:120px;overflow:hidden">
+              <div style="color:#8b949e">[11:42:03] Starting agent phase...</div>
+              <div>> Reading src/auth/middleware.ts</div>
+              <div>> Analyzing token validation logic</div>
+              <div>> Writing src/auth/jwt.ts</div>
+              <div style="color:#ffa657">> Checking existing tests...</div>
+              <div style="color:#8b949e">█ </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <span style="background:#21262d;border:1px solid #30363d;padding:1px 6px;border-radius:3px;cursor:pointer">[p] pause</span>
+              <span style="background:#21262d;border:1px solid #30363d;padding:1px 6px;border-radius:3px;cursor:pointer">[r] retry</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Split Panes</h3>
+      <p>Left: plans + tickets list. Right: selected ticket detail + live session log. Navigate with keyboard.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;background:#0d1117;color:#c9d1d9;padding:12px;border-radius:4px;line-height:1.5">
+        <div style="height:180px">
+          <div style="border-bottom:1px solid #30363d;margin-bottom:8px;display:flex;gap:16px">
+            <span style="color:#58a6ff;border-bottom:2px solid #58a6ff;padding-bottom:4px">Overview</span>
+            <span style="color:#8b949e;padding-bottom:4px">AUTH-001</span>
+            <span style="color:#8b949e;padding-bottom:4px">AUTH-002</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+            <div style="background:#1c2a1c;border:1px solid #2ea04326;padding:6px;border-radius:3px">
+              <div style="color:#3fb950;font-size:10px">RUNNING</div>
+              <div style="font-size:18px;margin:2px 0">2</div>
+              <div style="color:#8b949e;font-size:10px">tickets</div>
+            </div>
+            <div style="background:#21262d;border:1px solid #30363d;padding:6px;border-radius:3px">
+              <div style="color:#8b949e;font-size:10px">QUEUED</div>
+              <div style="font-size:18px;margin:2px 0">5</div>
+              <div style="color:#8b949e;font-size:10px">tickets</div>
+            </div>
+            <div style="background:#21262d;border:1px solid #30363d;padding:6px;border-radius:3px">
+              <div style="color:#ffa657;font-size:10px">ATTENTION</div>
+              <div style="font-size:18px;margin:2px 0">1</div>
+              <div style="color:#8b949e;font-size:10px">tickets</div>
+            </div>
+          </div>
+          <div style="font-size:10px">
+            <div style="display:flex;justify-content:space-between;padding:2px 4px;background:#1f2428;border-radius:2px;margin-bottom:2px">
+              <span style="color:#3fb950">▶ AUTH-001</span><span style="color:#8b949e">phase 2/6 · 3m 12s</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:2px 4px;margin-bottom:2px">
+              <span style="color:#3fb950">▶ BUG-003</span><span style="color:#8b949e">phase 4/4 · 8m 01s</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Overview + Tabs</h3>
+      <p>Summary dashboard as default view. Each running ticket gets its own tab for drill-down + session log.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:monospace;font-size:11px;background:#0d1117;color:#c9d1d9;padding:12px;border-radius:4px;line-height:1.5">
+        <div style="height:180px">
+          <div style="margin-bottom:8px;color:#58a6ff">feature-auth <span style="color:#3fb950">active</span> · 3 tickets</div>
+          <div style="margin-left:8px;margin-bottom:4px">
+            <div style="display:flex;justify-content:space-between;padding:3px 6px;background:#1f2428;border-radius:2px;margin-bottom:2px;border-left:2px solid #3fb950">
+              <span>AUTH-001 implement-auth</span>
+              <span style="color:#3fb950">running ▶</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:3px 6px;margin-bottom:2px;border-left:2px solid #30363d">
+              <span style="color:#8b949e">AUTH-002 write-tests</span>
+              <span style="color:#8b949e">queued</span>
+            </div>
+            <div style="display:flex;justify-content:space-between;padding:3px 6px;margin-bottom:2px;border-left:2px solid #30363d">
+              <span style="color:#8b949e">AUTH-003 create-pr</span>
+              <span style="color:#8b949e">queued</span>
+            </div>
+          </div>
+          <div style="border-top:1px solid #30363d;margin-top:8px;padding-top:8px;font-size:10px">
+            <div style="color:#ffa657">→ Enter: open session log &nbsp; p: pause &nbsp; r: retry &nbsp; esc: back</div>
+          </div>
+          <div style="margin-top:6px;background:#1c1c1c;padding:4px 6px;border-left:2px solid #58a6ff;font-size:10px;color:#8b949e">
+            AUTH-001 · phase 2/6 agent<br>
+            > Writing src/auth/jwt.ts █
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Hierarchical Drill-down</h3>
+      <p>Plans list → tickets list → ticket detail + log. One focused view at a time. Escape to go back up.</p>
+    </div>
+  </div>
+
+</div>

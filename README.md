@@ -189,6 +189,7 @@ workflows/                    # YAML workflow definitions
   standard.yaml               # Default feature workflow
   bugfix.yaml                 # Bug fix workflow
   minimal.yaml                # Single-phase testing workflow
+  manual-pr.yaml              # Like standard, but waits for you to open the PR
 
 prompts/                      # Nunjucks templates for agent phases
   interactive-system.md       # System prompt for PI interactive sessions

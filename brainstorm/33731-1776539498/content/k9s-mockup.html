@@ -1,0 +1,155 @@
+<h2>K9s-style TUI Mockup</h2>
+<p class="subtitle">Three screens: plans list → tickets list → session log. Click each to explore.</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="plans" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:'Courier New',monospace;font-size:10.5px;background:#0d1117;color:#c9d1d9;border-radius:4px;overflow:hidden">
+        <!-- Header -->
+        <div style="background:#1f2937;padding:3px 8px;display:flex;justify-content:space-between;border-bottom:1px solid #374151">
+          <span style="color:#60a5fa">orchestrator</span>
+          <span style="color:#9ca3af">context: ~/.orchestrator &nbsp;|&nbsp; plans(3) &nbsp;|&nbsp; running(2)</span>
+          <span style="color:#34d399">✓ watching</span>
+        </div>
+        <!-- Breadcrumb -->
+        <div style="background:#111827;padding:2px 8px;color:#fbbf24;border-bottom:1px solid #1f2937">
+          Plans
+        </div>
+        <!-- Table header -->
+        <div style="display:grid;grid-template-columns:160px 80px 60px 80px 1fr;gap:0;padding:3px 8px;background:#161b22;color:#8b949e;border-bottom:1px solid #21262d">
+          <span>NAME</span><span>STATUS</span><span>TICKETS</span><span>RUNNING</span><span>AGE</span>
+        </div>
+        <!-- Rows -->
+        <div style="display:grid;grid-template-columns:160px 80px 60px 80px 1fr;padding:3px 8px;background:#1c2333;border-bottom:1px solid #21262d">
+          <span style="color:#60a5fa">feature-auth</span>
+          <span style="color:#34d399">active</span>
+          <span>3/8</span>
+          <span style="color:#34d399">2</span>
+          <span style="color:#8b949e">2h</span>
+        </div>
+        <div style="display:grid;grid-template-columns:160px 80px 60px 80px 1fr;padding:3px 8px;border-bottom:1px solid #21262d">
+          <span>bugfix-rate-limit</span>
+          <span style="color:#34d399">active</span>
+          <span>0/1</span>
+          <span style="color:#34d399">0</span>
+          <span style="color:#8b949e">14m</span>
+        </div>
+        <div style="display:grid;grid-template-columns:160px 80px 60px 80px 1fr;padding:3px 8px;border-bottom:1px solid #21262d;color:#8b949e">
+          <span>refactor-db</span>
+          <span>paused</span>
+          <span>5/12</span>
+          <span>0</span>
+          <span>1d</span>
+        </div>
+        <!-- Footer -->
+        <div style="background:#1f2937;padding:3px 8px;display:flex;gap:12px;border-top:1px solid #374151;margin-top:2px">
+          <span><span style="color:#fbbf24">⏎</span> tickets</span>
+          <span><span style="color:#fbbf24">p</span> pause</span>
+          <span><span style="color:#fbbf24">/</span> filter</span>
+          <span><span style="color:#fbbf24">q</span> quit</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Screen 1 — Plans</h3>
+      <p>Top-level table. Active plans, ticket progress, running count, age. Press Enter to drill into tickets.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="tickets" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:'Courier New',monospace;font-size:10.5px;background:#0d1117;color:#c9d1d9;border-radius:4px;overflow:hidden">
+        <div style="background:#1f2937;padding:3px 8px;display:flex;justify-content:space-between;border-bottom:1px solid #374151">
+          <span style="color:#60a5fa">orchestrator</span>
+          <span style="color:#9ca3af">context: ~/.orchestrator &nbsp;|&nbsp; plan: feature-auth</span>
+          <span style="color:#34d399">✓ watching</span>
+        </div>
+        <div style="background:#111827;padding:2px 8px;color:#9ca3af;border-bottom:1px solid #1f2937">
+          Plans &rsaquo; <span style="color:#fbbf24">feature-auth</span>
+        </div>
+        <div style="display:grid;grid-template-columns:120px 100px 140px 60px 1fr;padding:3px 8px;background:#161b22;color:#8b949e;border-bottom:1px solid #21262d">
+          <span>TICKET</span><span>STATUS</span><span>PHASE</span><span>RETRY</span><span>AGE</span>
+        </div>
+        <div style="display:grid;grid-template-columns:120px 100px 140px 60px 1fr;padding:3px 8px;background:#1c2333;border-bottom:1px solid #21262d">
+          <span style="color:#60a5fa">AUTH-001</span>
+          <span style="color:#34d399">▶ running</span>
+          <span>agent <span style="color:#8b949e">2/6</span></span>
+          <span style="color:#8b949e">0</span>
+          <span style="color:#8b949e">3m</span>
+        </div>
+        <div style="display:grid;grid-template-columns:120px 100px 140px 60px 1fr;padding:3px 8px;background:#1c2333;border-bottom:1px solid #21262d">
+          <span style="color:#60a5fa">AUTH-002</span>
+          <span style="color:#34d399">▶ running</span>
+          <span>script <span style="color:#8b949e">1/6</span></span>
+          <span style="color:#8b949e">0</span>
+          <span style="color:#8b949e">1m</span>
+        </div>
+        <div style="display:grid;grid-template-columns:120px 100px 140px 60px 1fr;padding:3px 8px;border-bottom:1px solid #21262d;color:#8b949e">
+          <span>AUTH-003</span>
+          <span>· queued</span>
+          <span>—</span>
+          <span>0</span>
+          <span>2h</span>
+        </div>
+        <div style="display:grid;grid-template-columns:120px 100px 140px 60px 1fr;padding:3px 8px;border-bottom:1px solid #21262d">
+          <span>AUTH-004</span>
+          <span style="color:#f87171">✗ failed</span>
+          <span>agent <span style="color:#8b949e">3/6</span></span>
+          <span style="color:#fbbf24">2</span>
+          <span style="color:#8b949e">45m</span>
+        </div>
+        <div style="background:#1f2937;padding:3px 8px;display:flex;gap:12px;border-top:1px solid #374151;margin-top:2px">
+          <span><span style="color:#fbbf24">⏎</span> logs</span>
+          <span><span style="color:#fbbf24">p</span> pause</span>
+          <span><span style="color:#fbbf24">r</span> retry</span>
+          <span><span style="color:#fbbf24">s</span> skip</span>
+          <span><span style="color:#fbbf24">esc</span> plans</span>
+          <span><span style="color:#fbbf24">/</span> filter</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Screen 2 — Tickets</h3>
+      <p>Ticket list for selected plan. Status, current phase, retry count. Enter opens live session log.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="logs" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="font-family:'Courier New',monospace;font-size:10.5px;background:#0d1117;color:#c9d1d9;border-radius:4px;overflow:hidden">
+        <div style="background:#1f2937;padding:3px 8px;display:flex;justify-content:space-between;border-bottom:1px solid #374151">
+          <span style="color:#60a5fa">orchestrator</span>
+          <span style="color:#9ca3af">plan: feature-auth &nbsp;|&nbsp; ticket: AUTH-001</span>
+          <span style="color:#34d399">▶ live</span>
+        </div>
+        <div style="background:#111827;padding:2px 8px;color:#9ca3af;border-bottom:1px solid #1f2937">
+          Plans &rsaquo; feature-auth &rsaquo; <span style="color:#fbbf24">AUTH-001</span> &rsaquo; <span style="color:#60a5fa">session log</span>
+        </div>
+        <!-- Log stream -->
+        <div style="padding:6px 8px;height:130px;overflow:hidden;font-size:10px;line-height:1.65">
+          <div><span style="color:#6b7280">11:42:01</span> <span style="color:#818cf8">[agent]</span> Starting phase implement (2/6)</div>
+          <div><span style="color:#6b7280">11:42:02</span> <span style="color:#818cf8">[agent]</span> Spawning claude-code...</div>
+          <div><span style="color:#6b7280">11:42:03</span> <span style="color:#34d399">[claude]</span> Reading src/auth/middleware.ts</div>
+          <div><span style="color:#6b7280">11:42:05</span> <span style="color:#34d399">[claude]</span> Analyzing token validation logic</div>
+          <div><span style="color:#6b7280">11:42:09</span> <span style="color:#34d399">[claude]</span> Writing src/auth/jwt.ts</div>
+          <div><span style="color:#6b7280">11:42:12</span> <span style="color:#34d399">[claude]</span> Writing tests/auth/jwt.test.ts</div>
+          <div><span style="color:#6b7280">11:42:15</span> <span style="color:#fbbf24">[claude]</span> Running pnpm test...</div>
+          <div><span style="color:#6b7280">11:42:18</span> <span style="color:#34d399">[claude]</span> 12 tests passed</div>
+          <div><span style="color:#6b7280">11:42:19</span> <span style="color:#34d399">[claude]</span> <span style="color:#8b949e">█</span></div>
+        </div>
+        <div style="background:#1f2937;padding:3px 8px;display:flex;gap:12px;border-top:1px solid #374151">
+          <span><span style="color:#fbbf24">p</span> pause</span>
+          <span><span style="color:#fbbf24">r</span> retry</span>
+          <span><span style="color:#fbbf24">f</span> tail/scroll</span>
+          <span><span style="color:#fbbf24">esc</span> tickets</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Screen 3 — Session Log</h3>
+      <p>Full-screen live log stream for a running ticket. Tails automatically, scroll up to review history.</p>
+    </div>
+  </div>
+
+</div>

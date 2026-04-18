@@ -9,6 +9,7 @@ Workflows define the phase graph that tickets are executed through. Each workflo
 | `minimal` | `minimal.yaml` | Single script phase for testing |
 | `standard` | `standard.yaml` | Full implementation flow with self-review, simplify, PR review cycles, and merge |
 | `bugfix` | `bugfix.yaml` | Streamlined bug fix flow — skips self-review and simplify, uses minimal-change prompt |
+| `manual-pr` | `manual-pr.yaml` | Like standard, but waits for you to open the PR manually before running the review cycle |
 
 ## Phase Types
 
