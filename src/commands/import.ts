@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
+import { XMLParser } from "fast-xml-parser";
 import TurndownService from "turndown";
 import {
   type LoadConfigOptions,
@@ -15,22 +16,14 @@ const turndown = new TurndownService({
 
 const JIRA_SPRINT_FIELD_KEY = "com.pyxis.greenhopper.jira:gh-sprint";
 
-function parseXmlText(xml: string, tag: string): string {
-  const match = xml.match(
-    new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"),
-  );
-  return match ? match[1].trim() : "";
-}
-
-function parseXmlAttr(xml: string, tag: string, attr: string): string {
-  const match = xml.match(new RegExp(`<${tag}[^>]*${attr}="([^"]*)"`, "i"));
-  return match ? match[1].trim() : "";
-}
-
-function parseAllMatches(xml: string, tag: string): string[] {
-  const re = new RegExp(`<${tag}[^>]*>[\\s\\S]*?<\\/${tag}>`, "gi");
-  return xml.match(re) ?? [];
-}
+const parser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  // Keep description and comment content as raw HTML strings so turndown can convert them
+  stopNodes: ["*.description", "*.comment"],
+  isArray: (name) =>
+    ["item", "comment", "customfield", "customfieldvalue"].includes(name),
+});
 
 function htmlToMarkdown(html: string): string {
   if (!html) return "";
@@ -68,40 +61,42 @@ interface Issue {
   comments: Comment[];
 }
 
-function parseComments(itemXml: string): Comment[] {
-  return parseAllMatches(itemXml, "comment").map((block) => ({
-    author: parseXmlAttr(block, "comment", "author") || "unknown",
-    date: parseXmlAttr(block, "comment", "created") || "",
-    body: htmlToMarkdown(parseXmlText(block, "comment")),
+// biome-ignore lint/suspicious/noExplicitAny: fast-xml-parser returns untyped objects
+type XmlNode = any;
+
+function parseComments(item: XmlNode): Comment[] {
+  const comments: XmlNode[] = item.comments?.comment ?? [];
+  return comments.map((c: XmlNode) => ({
+    author: c["@_author"] ?? "unknown",
+    date: c["@_created"] ?? "",
+    body: htmlToMarkdown(c["#text"] ?? ""),
   }));
 }
 
-function parseSprintValues(itemXml: string): string[] {
-  const sprintFieldMatch = itemXml.match(
-    new RegExp(
-      `<customfield[^>]*key="${JIRA_SPRINT_FIELD_KEY}"[^>]*>([\\s\\S]*?)<\\/customfield>`,
-      "i",
-    ),
+function parseSprintValues(item: XmlNode): string[] {
+  const customfields: XmlNode[] = item.customfields?.customfield ?? [];
+  const sprintField = customfields.find(
+    (f: XmlNode) => f["@_key"] === JIRA_SPRINT_FIELD_KEY,
   );
-  if (!sprintFieldMatch) return [];
-  return parseAllMatches(sprintFieldMatch[1], "customfieldvalue").map((v) =>
-    parseXmlText(v, "customfieldvalue"),
-  );
+  if (!sprintField) return [];
+  const values: XmlNode[] =
+    sprintField.customfieldvalues?.customfieldvalue ?? [];
+  return values.map((v: XmlNode) => v["#text"] ?? v);
 }
 
-function parseItem(itemXml: string): Issue {
-  const descriptionMd = htmlToMarkdown(parseXmlText(itemXml, "description"));
-  const sprints = parseSprintValues(itemXml);
+function parseItem(item: XmlNode): Issue {
+  const descriptionMd = htmlToMarkdown(item.description ?? "");
+  const sprints = parseSprintValues(item);
   return {
-    id: parseXmlText(itemXml, "key"),
-    title: parseXmlText(itemXml, "summary"),
-    type: parseXmlText(itemXml, "type"),
-    url: parseXmlText(itemXml, "link"),
-    status: parseXmlText(itemXml, "status"),
-    sprint: sprints.length > 0 ? sprints[sprints.length - 1] : "",
+    id: item.key?.["#text"] ?? item.key ?? "",
+    title: item.summary ?? "",
+    type: item.type?.["#text"] ?? item.type ?? "",
+    url: item.link ?? "",
+    status: item.status?.["#text"] ?? item.status ?? "",
+    sprint: sprints.at(-1) ?? "",
     description: descriptionMd,
     acceptanceCriteria: extractAcceptanceCriteria(descriptionMd),
-    comments: parseComments(itemXml),
+    comments: parseComments(item),
   };
 }
 
@@ -139,20 +134,22 @@ function buildMarkdown(issue: Issue): string {
     }
   }
 
-  return lines.join("\n").trimEnd() + "\n";
+  return `${lines.join("\n").trimEnd()}\n`;
 }
 
 export function convertJiraXml(xmlPath: string, outputDir: string): string[] {
   const xml = readFileSync(xmlPath, "utf-8");
-  const items = parseAllMatches(xml, "item");
+  const parsed = parser.parse(xml);
+  const items: XmlNode[] = parsed?.rss?.channel?.item ?? [];
+
   if (items.length === 0)
     throw new Error("No <item> elements found in the XML file.");
 
   mkdirSync(outputDir, { recursive: true });
 
   const written: string[] = [];
-  for (const itemXml of items) {
-    const issue = parseItem(itemXml);
+  for (const item of items) {
+    const issue = parseItem(item);
     if (!issue.id) {
       console.warn(chalk.yellow("Warning:"), "Skipping item with no key.");
       continue;
