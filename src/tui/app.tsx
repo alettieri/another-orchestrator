@@ -1,11 +1,16 @@
-import { watch } from "chokidar";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Box, useApp, useInput, useStdout } from "ink";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
 import type { StateManager } from "../core/state.js";
-import type { PlanFile, TicketState } from "../core/types.js";
+import type { TicketState } from "../core/types.js";
 import { Breadcrumb } from "./components/Breadcrumb.js";
 import { Footer, type Hotkey } from "./components/Footer.js";
 import { Header } from "./components/Header.js";
+import {
+  usePlans,
+  useStateWatcher,
+  useTicketsByPlan,
+} from "./hooks/useStateData.js";
 import { PlansScreen } from "./screens/PlansScreen.js";
 
 interface AppProps {
@@ -13,53 +18,35 @@ interface AppProps {
   stateDir: string;
 }
 
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: false,
+    },
+  },
+});
+
 export function App({ stateManager, stateDir }: AppProps) {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AppInner stateManager={stateManager} stateDir={stateDir} />
+    </QueryClientProvider>
+  );
+}
+
+function AppInner({ stateManager, stateDir }: AppProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
 
-  const [plans, setPlans] = useState<PlanFile[]>([]);
-  const [ticketsByPlan, setTicketsByPlan] = useState<
-    Map<string, TicketState[]>
-  >(new Map());
+  const { data: plans = [] } = usePlans(stateManager);
+  const { data: ticketsByPlan = new Map<string, TicketState[]>() } =
+    useTicketsByPlan(
+    stateManager,
+    plans,
+  );
 
-  const loadData = useCallback(async () => {
-    const allPlans = await stateManager.listPlans();
-    setPlans(allPlans);
-    const ticketMap = new Map<string, TicketState[]>();
-    for (const plan of allPlans) {
-      const tickets = await stateManager.listTickets(plan.id);
-      ticketMap.set(plan.id, tickets);
-    }
-    setTicketsByPlan(ticketMap);
-  }, [stateManager]);
-
-  // Initial load
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  // Watch state dir for changes, debounced
-  useEffect(() => {
-    const debounceMs = 150;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const watcher = watch(stateDir, {
-      ignoreInitial: true,
-      depth: 2,
-    });
-
-    watcher.on("all", () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        loadData();
-      }, debounceMs);
-    });
-
-    return () => {
-      if (timer) clearTimeout(timer);
-      watcher.close();
-    };
-  }, [stateDir, loadData]);
+  useStateWatcher(stateDir);
 
   // Global quit key
   useInput(

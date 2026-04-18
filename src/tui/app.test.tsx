@@ -26,14 +26,18 @@ function createMockStateManager(
   } as StateManager;
 }
 
+// Wait for async query resolution
+async function waitForQueries(): Promise<void> {
+  await new Promise((r) => setTimeout(r, 100));
+}
+
 describe("App", () => {
   it("renders header with app name and live indicator", async () => {
     const sm = createMockStateManager();
     const { lastFrame, unmount } = render(
       <App stateManager={sm} stateDir="/tmp/fake-state" />,
     );
-    // Wait for async state load
-    await new Promise((r) => setTimeout(r, 50));
+    await waitForQueries();
     const frame = lastFrame();
     expect(frame).toContain("orchestrator");
     expect(frame).toContain("live");
@@ -45,7 +49,7 @@ describe("App", () => {
     const { lastFrame, unmount } = render(
       <App stateManager={sm} stateDir="/tmp/fake-state" />,
     );
-    await new Promise((r) => setTimeout(r, 50));
+    await waitForQueries();
     expect(lastFrame()).toContain("Plans");
     unmount();
   });
@@ -55,7 +59,7 @@ describe("App", () => {
     const { lastFrame, unmount } = render(
       <App stateManager={sm} stateDir="/tmp/fake-state" />,
     );
-    await new Promise((r) => setTimeout(r, 50));
+    await waitForQueries();
     const frame = lastFrame();
     expect(frame).toContain("navigate");
     expect(frame).toContain("quit");
@@ -67,7 +71,7 @@ describe("App", () => {
     const { lastFrame, unmount } = render(
       <App stateManager={sm} stateDir="/tmp/fake-state" />,
     );
-    await new Promise((r) => setTimeout(r, 50));
+    await waitForQueries();
     expect(lastFrame()).toContain("No plans found");
     unmount();
   });
@@ -140,7 +144,7 @@ describe("App", () => {
     const { lastFrame, unmount } = render(
       <App stateManager={sm} stateDir="/tmp/fake-state" />,
     );
-    await new Promise((r) => setTimeout(r, 50));
+    await waitForQueries();
     const frame = lastFrame();
     expect(frame).toContain("feature-auth");
     expect(frame).toContain("NAME");
@@ -159,7 +163,7 @@ describe("App", () => {
     const { stdin, unmount } = render(
       <App stateManager={sm} stateDir="/tmp/fake-state" />,
     );
-    await new Promise((r) => setTimeout(r, 50));
+    await waitForQueries();
     stdin.write("q");
     // The app should have exited — unmount to clean up
     unmount();
@@ -211,7 +215,7 @@ describe("App", () => {
     const { lastFrame, unmount } = render(
       <App stateManager={sm} stateDir="/tmp/fake-state" />,
     );
-    await new Promise((r) => setTimeout(r, 50));
+    await waitForQueries();
     const frame = lastFrame();
     expect(frame).toContain("1 plans");
     expect(frame).toContain("1 running");
