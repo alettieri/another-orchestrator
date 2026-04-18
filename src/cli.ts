@@ -9,6 +9,7 @@ import { register as registerRun } from "./commands/run.js";
 import { register as registerSessions } from "./commands/sessions.js";
 import { register as registerStatus } from "./commands/status.js";
 import { register as registerTickets } from "./commands/tickets.js";
+import { register as registerTui } from "./commands/tui.js";
 import type { LoadConfigOptions } from "./core/config.js";
 
 const packageDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,5 +33,6 @@ registerRun(program, getConfigOptions);
 registerTickets(program, getConfigOptions);
 registerSessions(program, getConfigOptions);
 registerInteractive(program, getConfigOptions);
+registerTui(program, getConfigOptions);
 
 program.parse();
