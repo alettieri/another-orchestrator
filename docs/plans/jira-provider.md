@@ -1,129 +1,128 @@
 # Plan: JIRA Provider Skill
 
-> Source PRD: `docs/specs/2026-04-17-jira-provider-design.md`
+> Source spec: docs/specs/2026-04-17-jira-provider-design.md
 
 ## Architectural decisions
 
-- **Deliverable**: single file `skills/providers/jira/SKILL.md` + `skills/providers/jira/.gitkeep`
-- **No source code changes**: this is a skill document only, following the same pattern as `skills/providers/linear/SKILL.md` and `skills/providers/github-issues/SKILL.md`
-- **Integration approach**: runtime MCP tool discovery (planner lists available tools, filters for JIRA ones, adapts to what's present)
-- **Grouping unit**: JIRA Sprint (not Epic or Fix Version)
-- **Sub-tasks**: excluded from plans — rolled up into parent issues, not created as separate tickets
-- **Ticket ID format**: JIRA key as-is (e.g. `PROJ-101`)
-- **Issue URL field**: stored in `linearUrl` (historical field name — holds any tracker URL, same as GitHub provider)
+- **Deliverable**: single file `skills/providers/jira/SKILL.md` + `.gitkeep`. No source code changes.
+- **MCP server**: `atlassian-rovo-mcp` (configured in `.mcp.json`), exposing two tools:
+  - `mcp__atlassian__getTeamworkGraphObject` — bulk-fetch up to 25 issues by URL or ARI
+  - `mcp__atlassian__getTeamworkGraphContext` — fetch relationship graph for a single issue (linked issues, sprints, etc.)
+- **Sprint listing**: these tools are graph/relationship tools, not JQL search. The planner seeds the fetch by asking the user for issue keys/URLs, then bulk-fetches via `getTeamworkGraphObject`.
+- **Dependency resolution**: `getTeamworkGraphContext` with `relationshipTypes` filtered to issue links.
+- **Field name**: JIRA issue URL stored in the `linearUrl` ticket field (historical name, same as GitHub provider).
 
 ---
 
 ## Phase 1: Core skill scaffold
 **Status**: pending
 
-**User stories**: Planner can open the JIRA provider skill and understand how to connect to JIRA and pull a sprint's issues into orchestrator state.
+**Covers**: directory structure, frontmatter, tool overview, fetching sprint issues, field mapping table.
 
 ### What to build
 
-Create the `skills/providers/jira/` directory with a `.gitkeep` and the `SKILL.md` file containing:
-- Frontmatter with description
-- Introduction explaining the skill's purpose
-- **MCP Tool Discovery** section: how to list available tools, filter for JIRA ones, and identify tools for searching issues, getting a single issue, listing boards, and listing sprints. Includes a table of expected tool name patterns and a JQL fallback if sprint listing isn't available.
-- **Fetching a Sprint** section: step-by-step instructions to locate a board, find the sprint by name (or use active sprint), and fetch all issues excluding Sub-tasks.
-- **Field Mapping** table: JIRA fields → orchestrator ticket fields (`key`, `summary`, `description`, issue URL → `linearUrl`, plus generated fields for `branch`, `worktree`).
+Create `skills/providers/jira/SKILL.md` (and `.gitkeep`) with the skill frontmatter and the first three sections: an overview of the two MCP tools, how to seed and bulk-fetch sprint issues, and the JIRA→orchestrator field mapping table.
 
 ### Acceptance criteria
 
 - [ ] `skills/providers/jira/.gitkeep` exists
-- [ ] `skills/providers/jira/SKILL.md` exists with valid frontmatter
-- [ ] Discovery section instructs the planner to list and filter MCP tools
-- [ ] Discovery section includes a table of expected tool name patterns
-- [ ] Discovery section includes a JQL fallback for sprint queries
-- [ ] Fetching section covers: locate board, find sprint by name, filter out Sub-tasks
-- [ ] Field mapping table covers all required orchestrator ticket fields
+- [ ] `skills/providers/jira/SKILL.md` exists with correct frontmatter
+- [ ] Skill includes MCP tool overview section with both tool names, purposes, and parameters
+- [ ] Skill explains how to ask the user for issue keys/URLs and seed the fetch
+- [ ] Skill shows how to call `getTeamworkGraphObject` to bulk-fetch issues (batches of ≤25)
+- [ ] Field mapping table covers all required orchestrator fields
 
 #### Tasks
 
-1. **Create directory scaffold**
+1. **Create directory and .gitkeep**
 
-   Create `skills/providers/jira/.gitkeep` to match the existing provider directory pattern.
-
-   #### Acceptance criteria
-   - [ ] File exists at `skills/providers/jira/.gitkeep`
-
-2. **Write SKILL.md — frontmatter, intro, discovery section**
-
-   Add frontmatter (`description`), a short intro paragraph, and the full MCP Tool Discovery section including the tool name pattern table and JQL fallback.
+   Mirror the pattern of `skills/providers/linear/` and `skills/providers/github-issues/`.
 
    #### Acceptance criteria
-   - [ ] Frontmatter present with `description` field
-   - [ ] Discovery section guides the planner to filter tools by `jira` name
-   - [ ] Tool pattern table covers search, get-issue, list-boards, list-sprints
-   - [ ] JQL fallback documented for when sprint listing tool is absent
+   - [ ] `skills/providers/jira/.gitkeep` created
 
-3. **Write SKILL.md — fetching and field mapping sections**
+2. **Write SKILL.md frontmatter and MCP tool overview**
 
-   Add the Fetching a Sprint section (step-by-step) and the Field Mapping table.
+   Include `description` frontmatter. Document both MCP tools with their purpose, key parameters (`cloudId`, `objects`/`objectIdentifier`), and the MCP server instruction (do not use for basic CRUD).
 
    #### Acceptance criteria
-   - [ ] Fetching section lists all steps: find board → find sprint → fetch issues → filter sub-tasks
-   - [ ] Active sprint fallback documented (when no sprint name given)
-   - [ ] Field mapping covers: `key`, `summary`, `description` (with ADF note), issue URL, `acceptanceCriteria`, `repo`, `branch`, `worktree`
+   - [ ] Frontmatter `description` matches the pattern of other providers
+   - [ ] Both tools documented with purpose and key parameters
+
+3. **Write fetching section**
+
+   Explain: (1) ask user for project key + sprint name and issue keys/URLs; (2) bulk-fetch in batches of ≤25 via `getTeamworkGraphObject`; (3) note cloudId can be the site URL (e.g. `yourcompany.atlassian.net`).
+
+   #### Acceptance criteria
+   - [ ] Batching constraint (≤25) documented
+   - [ ] cloudId format explained
+
+4. **Write field mapping table**
+
+   Map all JIRA fields to orchestrator ticket fields, including the `linearUrl` note.
+
+   #### Acceptance criteria
+   - [ ] All 8 orchestrator fields covered in the mapping table
 
 ---
 
 ## Phase 2: Complete the skill
 **Status**: pending
 
-**User stories**: Planner can fully convert a JIRA sprint into a valid orchestrator plan, including acceptance criteria, dependencies, branch names, workflow selection, with a concrete end-to-end example to reference.
+**Covers**: acceptance criteria extraction, dependency resolution, branch/worktree naming, workflow selection, end-to-end example, checklist, update path note.
 
 ### What to build
 
-Extend `SKILL.md` with the remaining sections that complete the field-to-state transformation:
-- **Acceptance Criteria Extraction**: how to find explicit AC sections, checkbox lists, numbered lists, and how to derive criteria when none exist.
-- **Dependency Resolution**: mapping JIRA `blocks`/`is blocked by` links to `blockedBy` arrays; handling cross-plan dependencies.
-- **Branch & Worktree Naming**: slug generation rules and examples.
-- **Workflow Selection**: issue type / label → workflow name table.
-- **End-to-end Example**: a complete sprint-to-plan walkthrough with sample `plan.json` and one ticket JSON.
-- **Checklist**: final verification steps the planner should run before handing off to the runner.
-- **Update Path** note: what to do once specific MCP tool names are confirmed.
+Complete `skills/providers/jira/SKILL.md` with the remaining sections needed to take the planner from raw JIRA data to finished orchestrator state files.
 
 ### Acceptance criteria
 
-- [ ] Acceptance criteria extraction covers: explicit sections, checkbox lists, numbered lists, derived fallback
-- [ ] Dependency resolution maps `is blocked by` and `blocks` link types; `relates to`/`duplicates` are skipped
-- [ ] Cross-plan dependency handling documented
-- [ ] Branch naming convention matches other providers (`<username>/<key-lowercase>-<slug>`)
-- [ ] Workflow selection table covers Bug → bugfix, Story/Task/Epic → standard, hotfix label → bugfix
-- [ ] End-to-end example includes plan.json and at least one complete ticket JSON
-- [ ] Checklist covers all verification steps (sub-task exclusion, ticket IDs, dependencies, AC, workflow, branch names, linearUrl, repo path, `orchestrator status`)
-- [ ] Update path note explains how to harden the skill once tool names are known
+- [ ] Acceptance criteria extraction section with examples
+- [ ] Dependency resolution using `getTeamworkGraphContext` with `relationshipTypes` filter
+- [ ] Branch and worktree naming convention with examples
+- [ ] Workflow selection table (issue type → workflow name)
+- [ ] End-to-end example: sprint → `plan.json` + one `ticket.json`
+- [ ] Checklist section matching the pattern of other providers
 
 #### Tasks
 
 1. **Write acceptance criteria extraction section**
 
-   Document how to locate AC in JIRA descriptions (explicit headers, checkboxes, numbered lists) and derive them when absent. Mirror the depth of the Linear provider's equivalent section.
+   Document the four lookup patterns (explicit headers, checkboxes, numbered lists, derived). Include a before/after example matching the style of the Linear skill.
 
    #### Acceptance criteria
-   - [ ] Covers explicit section headers (AC, Acceptance Criteria, Definition of Done, Requirements)
-   - [ ] Covers `- [ ]` checkbox patterns
-   - [ ] Covers derived fallback with "Existing tests still pass" default
+   - [ ] Four extraction patterns documented
+   - [ ] Before/after example present
 
 2. **Write dependency resolution section**
 
-   Document mapping of JIRA issue link types to `blockedBy`. Include guidance on cross-plan dependencies.
+   Show how to call `getTeamworkGraphContext` on each issue with `objectType: "JiraWorkItem"` and filter `relationshipTypes` to issue links. Map `blocks`/`is blocked by` to `blockedBy` array. Note cross-plan dependencies go in the description.
 
    #### Acceptance criteria
-   - [ ] `is blocked by` → add to `blockedBy`
-   - [ ] `blocks` → add this key to the other ticket's `blockedBy`
-   - [ ] `relates to` and `duplicates` documented as skip
-   - [ ] Cross-plan note matches the pattern in the Linear provider
+   - [ ] `getTeamworkGraphContext` call shown with correct parameters
+   - [ ] Link type mapping table present
 
-3. **Write branch naming, workflow selection, example, checklist, and update path**
+3. **Write branch naming and workflow selection sections**
 
-   Add the remaining sections to complete the skill. The end-to-end example should use the same fictional sprint from the design spec (PROJ-101/102/103) for consistency with the spec.
+   Branch convention `<username>/<key-lowercase>-<slug>` with slug rules and two examples. Workflow table: Bug → bugfix, Story/Task/Epic → standard, hotfix label → bugfix.
 
    #### Acceptance criteria
-   - [ ] Branch naming examples use `<username>/proj-NNN-<slug>` format
-   - [ ] Workflow table covers Bug, Story/Task/Epic, and hotfix label
-   - [ ] Example plan.json is valid against the orchestrator plan schema
-   - [ ] Example ticket JSON is complete (all required fields present)
-   - [ ] Checklist has 9 items matching the design spec
-   - [ ] Update path section present at end of file
+   - [ ] Two branch name examples
+   - [ ] Workflow table with all covered issue types
+
+4. **Write end-to-end example**
+
+   Three-issue sprint example producing `plan.json` and one `ticket.json` (the bug). Match the structure of the Linear and GitHub provider examples exactly.
+
+   #### Acceptance criteria
+   - [ ] `plan.json` JSON block present and valid
+   - [ ] One `ticket.json` JSON block present and valid
+   - [ ] Bug ticket uses `bugfix` workflow override
+
+5. **Write checklist section**
+
+   9-item checklist matching the pattern of other providers. Include the `orchestrator status` verification step.
+
+   #### Acceptance criteria
+   - [ ] 9 checklist items present
+   - [ ] `orchestrator status` command included
