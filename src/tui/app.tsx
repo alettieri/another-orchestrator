@@ -1,6 +1,6 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Box, useApp, useInput, useStdout } from "ink";
-import { useCallback, useMemo } from "react";
+import { useCallback } from "react";
 import type { StateManager } from "../core/state.js";
 import type { TicketState } from "../core/types.js";
 import { Breadcrumb } from "./components/Breadcrumb.js";
@@ -11,6 +11,7 @@ import {
   useStateWatcher,
   useTicketsByPlan,
 } from "./hooks/useStateData.js";
+import { queryClient } from "./queries/query-client.js";
 import { PlansScreen } from "./screens/PlansScreen.js";
 
 interface AppProps {
@@ -18,14 +19,22 @@ interface AppProps {
   stateDir: string;
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: false,
-    },
-  },
-});
+const breadcrumbPath = ["Plans"];
+
+const hotkeys: Hotkey[] = [
+  { key: "↑↓", label: "navigate" },
+  { key: "⏎", label: "open" },
+  { key: "/", label: "filter" },
+  { key: "q", label: "quit" },
+];
+
+function countRunning(ticketsByPlan: Map<string, TicketState[]>): number {
+  return Array.from(ticketsByPlan.values()).reduce(
+    (count, tickets) =>
+      count + tickets.filter((t) => t.status === "running").length,
+    0,
+  );
+}
 
 export function App({ stateManager, stateDir }: AppProps) {
   return (
@@ -57,22 +66,7 @@ function AppInner({ stateManager, stateDir }: AppProps) {
     ),
   );
 
-  const runningCount = useMemo(() => {
-    let count = 0;
-    for (const tickets of ticketsByPlan.values()) {
-      count += tickets.filter((t) => t.status === "running").length;
-    }
-    return count;
-  }, [ticketsByPlan]);
-
-  const breadcrumbPath = ["Plans"];
-
-  const hotkeys: Hotkey[] = [
-    { key: "↑↓", label: "navigate" },
-    { key: "⏎", label: "open" },
-    { key: "/", label: "filter" },
-    { key: "q", label: "quit" },
-  ];
+  const runningCount = countRunning(ticketsByPlan);
 
   // Reserve lines for header (1) + breadcrumb (1) + column header (1) + footer (1) + padding (2)
   const terminalHeight = stdout?.rows ?? 24;
