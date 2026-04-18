@@ -15,6 +15,8 @@ import TurndownService from "turndown";
 
 const turndown = new TurndownService({ headingStyle: "atx", bulletListMarker: "-" });
 
+const JIRA_SPRINT_FIELD_KEY = "com.pyxis.greenhopper.jira:gh-sprint";
+
 function parseXmlText(xml: string, tag: string): string {
   const match = xml.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
   return match ? match[1].trim() : "";
@@ -36,23 +38,18 @@ function htmlToMarkdown(html: string): string {
 }
 
 function extractAcceptanceCriteria(markdown: string): string {
-  const headingPatterns = [
-    /^#{1,4}\s+(acceptance criteria|ac|definition of done|requirements)\s*$/im,
-  ];
-  for (const pattern of headingPatterns) {
-    const match = markdown.match(pattern);
-    if (!match || match.index === undefined) continue;
+  const pattern = /^#{1,4}\s+(acceptance criteria|ac|definition of done|requirements)\s*$/im;
+  const match = markdown.match(pattern);
+  if (!match || match.index === undefined) return "";
 
-    const afterHeading = markdown.slice(match.index + match[0].length).trim();
-    // Take everything up to the next heading
-    const nextHeading = afterHeading.match(/^#{1,4}\s+/m);
-    const section = nextHeading?.index !== undefined
+  const afterHeading = markdown.slice(match.index + match[0].length).trim();
+  const nextHeading = afterHeading.match(/^#{1,4}\s+/m);
+  const section =
+    nextHeading?.index !== undefined
       ? afterHeading.slice(0, nextHeading.index).trim()
       : afterHeading.trim();
 
-    if (section) return section;
-  }
-  return "";
+  return section;
 }
 
 function parseComments(itemXml: string): Array<{ author: string; date: string; body: string }> {
@@ -60,7 +57,7 @@ function parseComments(itemXml: string): Array<{ author: string; date: string; b
   return commentBlocks.map((block) => {
     const author = parseXmlAttr(block, "comment", "author");
     const created = parseXmlAttr(block, "comment", "created");
-    const inner = block.replace(/^<comment[^>]*>/, "").replace(/<\/comment>$/, "").trim();
+    const inner = parseXmlText(block, "comment");
     return {
       author: author || "unknown",
       date: created || "",
@@ -72,12 +69,12 @@ function parseComments(itemXml: string): Array<{ author: string; date: string; b
 function parseSprintValues(itemXml: string): string[] {
   // Find the sprint custom field block
   const sprintFieldMatch = itemXml.match(
-    /<customfield[^>]*key="com\.pyxis\.greenhopper\.jira:gh-sprint"[^>]*>([\s\S]*?)<\/customfield>/i,
+    new RegExp(`<customfield[^>]*key="${JIRA_SPRINT_FIELD_KEY}"[^>]*>([\\s\\S]*?)<\\/customfield>`, "i"),
   );
   if (!sprintFieldMatch) return [];
   const fieldBlock = sprintFieldMatch[1];
   const values = parseAllMatches(fieldBlock, "customfieldvalue");
-  return values.map((v) => v.replace(/<customfieldvalue[^>]*>/, "").replace(/<\/customfieldvalue>/, "").trim());
+  return values.map((v) => parseXmlText(v, "customfieldvalue"));
 }
 
 interface Issue {
