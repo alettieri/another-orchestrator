@@ -1,10 +1,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import chalk from "chalk";
 import type { Command } from "commander";
 import TurndownService from "turndown";
-import type { LoadConfigOptions } from "../core/config.js";
+import {
+  type LoadConfigOptions,
+  resolveOrchestratorHome,
+} from "../core/config.js";
 
 const turndown = new TurndownService({
   headingStyle: "atx",
@@ -152,6 +154,7 @@ export function convertJiraXml(xmlPath: string, outputDir: string): string[] {
   for (const itemXml of items) {
     const issue = parseItem(itemXml);
     if (!issue.id) {
+      console.warn(chalk.yellow("Warning:"), "Skipping item with no key.");
       continue;
     }
     const outputPath = join(outputDir, `${issue.id}.md`);
@@ -170,19 +173,16 @@ export function register(
     .description(
       "Convert a JIRA XML export to Markdown issue files in ~/.orchestrator/issues/",
     )
-    .option(
-      "-o, --out <dir>",
-      "Output directory",
-      join(homedir(), ".orchestrator", "issues"),
-    )
-    .action((file: string, opts: { out: string }) => {
+    .option("-o, --out <dir>", "Output directory")
+    .action((file: string, opts: { out?: string }) => {
+      const outputDir = opts.out ?? join(resolveOrchestratorHome(), "issues");
       try {
-        const written = convertJiraXml(file, opts.out);
+        const written = convertJiraXml(file, outputDir);
         for (const path of written) {
           console.log(`${chalk.green("✓")} ${path}`);
         }
         console.log(
-          chalk.dim(`\n${written.length} issue(s) written to ${opts.out}`),
+          chalk.dim(`\n${written.length} issue(s) written to ${outputDir}`),
         );
       } catch (err) {
         console.error(
