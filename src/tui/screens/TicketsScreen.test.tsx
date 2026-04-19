@@ -8,7 +8,7 @@ import type {
   WorkflowDefinition,
 } from "../../core/types.js";
 import { queryClient } from "../queries/query-client.js";
-import { TicketsScreen } from "./TicketsScreen.js";
+import { TicketsScreen, getLatestSessionId } from "./TicketsScreen.js";
 
 function makePlan(overrides: Partial<PlanFile> = {}): PlanFile {
   return {
@@ -249,6 +249,103 @@ describe("TicketsScreen", () => {
     unmount();
   });
 
+  it("renders SESSION column header", () => {
+    const plan = makePlan();
+    const tickets = [makeTicket()];
+    const workflows = new Map([["standard", standardWorkflow]]);
+
+    const { lastFrame, unmount } = renderWithQuery(
+      <TicketsScreen
+        plan={plan}
+        tickets={tickets}
+        workflows={workflows}
+        height={10}
+      />,
+    );
+
+    expect(lastFrame()).toContain("SESSION");
+    unmount();
+  });
+
+  it("shows truncated session ID when longer than 10 chars", () => {
+    const plan = makePlan();
+    const tickets = [
+      makeTicket({
+        phaseHistory: [
+          {
+            phase: "implement",
+            status: "success",
+            startedAt: new Date().toISOString(),
+            completedAt: null,
+            sessionId: "abc123defghijklmnop",
+          },
+        ],
+      }),
+    ];
+    const workflows = new Map([["standard", standardWorkflow]]);
+
+    const { lastFrame, unmount } = renderWithQuery(
+      <TicketsScreen
+        plan={plan}
+        tickets={tickets}
+        workflows={workflows}
+        height={10}
+      />,
+    );
+
+    expect(lastFrame()).toContain("abc123defg…");
+    unmount();
+  });
+
+  it("shows dash dimmed when no session ID", () => {
+    const plan = makePlan();
+    const tickets = [makeTicket({ phaseHistory: [] })];
+    const workflows = new Map([["standard", standardWorkflow]]);
+
+    const { lastFrame, unmount } = renderWithQuery(
+      <TicketsScreen
+        plan={plan}
+        tickets={tickets}
+        workflows={workflows}
+        height={10}
+      />,
+    );
+
+    expect(lastFrame()).toContain("—");
+    unmount();
+  });
+
+  it("shows full session ID without truncation when <= 10 chars", () => {
+    const plan = makePlan();
+    const tickets = [
+      makeTicket({
+        phaseHistory: [
+          {
+            phase: "implement",
+            status: "success",
+            startedAt: new Date().toISOString(),
+            completedAt: null,
+            sessionId: "abc123",
+          },
+        ],
+      }),
+    ];
+    const workflows = new Map([["standard", standardWorkflow]]);
+
+    const { lastFrame, unmount } = renderWithQuery(
+      <TicketsScreen
+        plan={plan}
+        tickets={tickets}
+        workflows={workflows}
+        height={10}
+      />,
+    );
+
+    expect(lastFrame()).toContain("abc123");
+    expect(lastFrame()).not.toContain("…");
+    unmount();
+  });
+
   it("shows dash for phase when workflow is not loaded", () => {
     const plan = makePlan();
     const tickets = [makeTicket()];
@@ -266,5 +363,41 @@ describe("TicketsScreen", () => {
     const frame = lastFrame();
     expect(frame).toContain("—");
     unmount();
+  });
+});
+
+describe("getLatestSessionId", () => {
+  it("returns null when phaseHistory is empty", () => {
+    const ticket = makeTicket({ phaseHistory: [] });
+    expect(getLatestSessionId(ticket)).toBeNull();
+  });
+
+  it("returns null when no entry has a sessionId", () => {
+    const ticket = makeTicket({
+      phaseHistory: [
+        { phase: "implement", status: "success", startedAt: new Date().toISOString(), completedAt: null },
+      ],
+    });
+    expect(getLatestSessionId(ticket)).toBeNull();
+  });
+
+  it("returns the sessionId from the last entry that has one", () => {
+    const ticket = makeTicket({
+      phaseHistory: [
+        { phase: "implement", status: "success", startedAt: new Date().toISOString(), completedAt: null, sessionId: "first" },
+        { phase: "verify", status: "success", startedAt: new Date().toISOString(), completedAt: null, sessionId: "last" },
+      ],
+    });
+    expect(getLatestSessionId(ticket)).toBe("last");
+  });
+
+  it("skips entries without sessionId when finding the latest", () => {
+    const ticket = makeTicket({
+      phaseHistory: [
+        { phase: "implement", status: "success", startedAt: new Date().toISOString(), completedAt: null, sessionId: "only" },
+        { phase: "verify", status: "success", startedAt: new Date().toISOString(), completedAt: null },
+      ],
+    });
+    expect(getLatestSessionId(ticket)).toBe("only");
   });
 });

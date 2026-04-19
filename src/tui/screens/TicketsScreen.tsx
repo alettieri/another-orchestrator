@@ -1,7 +1,8 @@
+import { execSync } from "node:child_process";
 import chalk from "chalk";
-import { Box, Text } from "ink";
+import { Box, Text, useInput } from "ink";
 import type React from "react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   PlanFile,
   TicketState,
@@ -71,6 +72,13 @@ function getRetryCount(ticket: TicketState): number {
   return Object.values(ticket.retries).reduce<number>((sum, n) => sum + n, 0);
 }
 
+export function getLatestSessionId(ticket: TicketState): string | null {
+  const entry = [...ticket.phaseHistory]
+    .reverse()
+    .find((e) => e.sessionId !== undefined);
+  return entry?.sessionId ?? null;
+}
+
 function getBlockedBy(plan: PlanFile, ticketId: string): string {
   const entry = plan.tickets.find((t) => t.ticketId === ticketId);
   if (!entry || entry.blockedBy.length === 0) return "—";
@@ -84,6 +92,7 @@ const COLUMNS: Column[] = [
   { key: "retry", label: "RETRY", width: 8 },
   { key: "block", label: "BLOCK", width: 16 },
   { key: "age", label: "AGE", width: 8 },
+  { key: "session", label: "SESSION", width: 14 },
 ];
 
 export function TicketsScreen({
@@ -93,11 +102,42 @@ export function TicketsScreen({
   height,
 }: TicketsScreenProps): React.ReactElement {
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+  }, []);
+
+  useInput((input) => {
+    if (input === "c") {
+      const ticket = tickets[selectedIndex];
+      if (!ticket) return;
+      const sessionId = getLatestSessionId(ticket);
+      if (!sessionId) return;
+      execSync(`echo -n ${JSON.stringify(sessionId)} | pbcopy`);
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+      setCopied(true);
+      copyTimeoutRef.current = setTimeout(() => setCopied(false), 1500);
+    }
+  });
 
   const rows = useMemo(() => {
-    return tickets.map((ticket) => {
+    return tickets.map((ticket, index) => {
       const retryCount = getRetryCount(ticket);
       const blockedBy = getBlockedBy(plan, ticket.ticketId);
+      const sessionId = getLatestSessionId(ticket);
+
+      let sessionCell: React.ReactElement;
+      if (copied && index === selectedIndex) {
+        sessionCell = <Text color="green">Copied!</Text>;
+      } else if (sessionId) {
+        const display =
+          sessionId.length > 10 ? `${sessionId.slice(0, 10)}…` : sessionId;
+        sessionCell = <Text>{display}</Text>;
+      } else {
+        sessionCell = <Text dimColor>—</Text>;
+      }
 
       return {
         ticket: ticket.ticketId,
@@ -110,9 +150,10 @@ export function TicketsScreen({
         ),
         block: <Text dimColor={blockedBy === "—"}>{blockedBy}</Text>,
         age: formatAge(ticket),
+        session: sessionCell,
       };
     });
-  }, [tickets, plan, workflows]);
+  }, [tickets, plan, workflows, copied, selectedIndex]);
 
   if (tickets.length === 0) {
     return (
