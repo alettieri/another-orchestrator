@@ -169,6 +169,82 @@ describe("App", () => {
     unmount();
   });
 
+  it("navigates to tickets screen on Enter and back on Escape", async () => {
+    const plans = [
+      {
+        id: "plan-1",
+        name: "feature-auth",
+        createdAt: new Date().toISOString(),
+        createdBy: "user",
+        repo: null,
+        workflow: "standard",
+        agent: null,
+        worktreeRoot: "/tmp",
+        status: "active" as const,
+        tickets: [{ ticketId: "T-1", order: 1, blockedBy: [] }],
+      },
+    ];
+    const ticketsByPlan = new Map([
+      [
+        "plan-1",
+        [
+          {
+            planId: "plan-1",
+            ticketId: "T-1",
+            title: "Auth login",
+            description: "",
+            acceptanceCriteria: [],
+            linearUrl: null,
+            repo: null,
+            workflow: "standard",
+            branch: "feat/auth",
+            worktree: "/tmp/wt",
+            agent: null,
+            status: "running" as const,
+            currentPhase: "implement",
+            phaseHistory: [],
+            context: {},
+            retries: {},
+            error: null,
+          },
+        ],
+      ],
+    ]);
+
+    const sm = createMockStateManager(plans, ticketsByPlan);
+    const { lastFrame, stdin, unmount } = render(
+      <App stateManager={sm} stateDir="/tmp/fake-state" />,
+    );
+    await waitForQueries();
+
+    // Should be on plans screen
+    expect(lastFrame()).toContain("feature-auth");
+    expect(lastFrame()).toContain("PROGRESS");
+
+    // Press Enter to navigate to tickets screen
+    stdin.write("\r");
+    await waitForQueries();
+
+    // Should now show tickets screen with breadcrumb
+    const ticketsFrame = lastFrame();
+    expect(ticketsFrame).toContain("feature-auth");
+    expect(ticketsFrame).toContain("T-1");
+    expect(ticketsFrame).toContain("TICKET");
+    expect(ticketsFrame).toContain("PHASE");
+    expect(ticketsFrame).toContain("BLOCK");
+    // Footer should show "back"
+    expect(ticketsFrame).toContain("back");
+
+    // Press Escape to go back
+    stdin.write("\u001B");
+    await waitForQueries();
+
+    // Should be back on plans screen
+    const plansFrame = lastFrame();
+    expect(plansFrame).toContain("PROGRESS");
+    unmount();
+  });
+
   it("displays plan and running counts in header", async () => {
     const plans = [
       {
