@@ -8,7 +8,7 @@ import type {
   WorkflowDefinition,
 } from "../../core/types.js";
 import { queryClient } from "../queries/query-client.js";
-import { TicketsScreen, getLatestSessionId } from "./TicketsScreen.js";
+import { getLatestSessionId, TicketsScreen } from "./TicketsScreen.js";
 
 function makePlan(overrides: Partial<PlanFile> = {}): PlanFile {
   return {
@@ -375,7 +375,12 @@ describe("getLatestSessionId", () => {
   it("returns null when no entry has a sessionId", () => {
     const ticket = makeTicket({
       phaseHistory: [
-        { phase: "implement", status: "success", startedAt: new Date().toISOString(), completedAt: null },
+        {
+          phase: "implement",
+          status: "success",
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+        },
       ],
     });
     expect(getLatestSessionId(ticket)).toBeNull();
@@ -384,8 +389,20 @@ describe("getLatestSessionId", () => {
   it("returns the sessionId from the last entry that has one", () => {
     const ticket = makeTicket({
       phaseHistory: [
-        { phase: "implement", status: "success", startedAt: new Date().toISOString(), completedAt: null, sessionId: "first" },
-        { phase: "verify", status: "success", startedAt: new Date().toISOString(), completedAt: null, sessionId: "last" },
+        {
+          phase: "implement",
+          status: "success",
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          sessionId: "first",
+        },
+        {
+          phase: "verify",
+          status: "success",
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          sessionId: "last",
+        },
       ],
     });
     expect(getLatestSessionId(ticket)).toBe("last");
@@ -394,8 +411,19 @@ describe("getLatestSessionId", () => {
   it("skips entries without sessionId when finding the latest", () => {
     const ticket = makeTicket({
       phaseHistory: [
-        { phase: "implement", status: "success", startedAt: new Date().toISOString(), completedAt: null, sessionId: "only" },
-        { phase: "verify", status: "success", startedAt: new Date().toISOString(), completedAt: null },
+        {
+          phase: "implement",
+          status: "success",
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          sessionId: "only",
+        },
+        {
+          phase: "verify",
+          status: "success",
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+        },
       ],
     });
     expect(getLatestSessionId(ticket)).toBe("only");

@@ -105,9 +105,12 @@ export function TicketsScreen({
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => () => {
-    if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    },
+    [],
+  );
 
   useInput((input) => {
     if (input === "c") {
