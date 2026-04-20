@@ -22,6 +22,7 @@ export interface StateManager {
   getReadyTickets(): Promise<TicketState[]>;
   getRunningCount(): Promise<number>;
   resolveDependencies(planId: string): Promise<void>;
+  maybeMarkPlanComplete(planId: string): Promise<void>;
 }
 
 async function readJsonSafe<T>(
@@ -199,6 +200,15 @@ export function createStateManager(stateDir: string): StateManager {
         }
       }
 
+      await this.maybeMarkPlanComplete(planId);
+    },
+
+    async maybeMarkPlanComplete(planId) {
+      const plan = await this.getPlan(planId);
+      if (!plan) throw new Error(`Plan "${planId}" not found`);
+      if (plan.status === "complete") return;
+
+      const tickets = await this.listTickets(planId);
       const allComplete =
         tickets.length > 0 && tickets.every((t) => t.status === "complete");
       if (allComplete) {

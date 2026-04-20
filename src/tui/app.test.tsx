@@ -23,6 +23,7 @@ function createMockStateManager(
     getReadyTickets: vi.fn().mockResolvedValue([]),
     getRunningCount: vi.fn().mockResolvedValue(0),
     resolveDependencies: vi.fn().mockResolvedValue(undefined),
+    maybeMarkPlanComplete: vi.fn().mockResolvedValue(undefined),
   } as StateManager;
 }
 

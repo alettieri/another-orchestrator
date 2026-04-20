@@ -145,6 +145,37 @@ phases:
     await rm(tmpDir, { recursive: true, force: true });
   });
 
+  async function readPlan(planId: string): Promise<PlanFile> {
+    const path = join(stateDir, "plans", planId, "plan.json");
+    const raw = await readFile(path, "utf-8");
+    return JSON.parse(raw);
+  }
+
+  it("flips plan to complete when the last ticket finishes via runSingleTicket", async () => {
+    await writeFile(
+      join(scriptDir, "run.sh"),
+      '#!/usr/bin/env bash\necho "ok"',
+      { mode: 0o755 },
+    );
+
+    const plan = makePlan({
+      tickets: [
+        { ticketId: "TICKET-1", order: 1, blockedBy: [] },
+        { ticketId: "TICKET-2", order: 2, blockedBy: [] },
+      ],
+    });
+    await savePlan(plan);
+    await saveTicket(makeTicket({ ticketId: "TICKET-1", status: "complete" }));
+    await saveTicket(makeTicket({ ticketId: "TICKET-2", status: "ready" }));
+
+    const runner = createRunner(config);
+    const result = await runner.runSingleTicket("test-plan", "TICKET-2");
+
+    expect(result.status).toBe("complete");
+    const onDiskPlan = await readPlan("test-plan");
+    expect(onDiskPlan.status).toBe("complete");
+  });
+
   it("advances through phases to completion", async () => {
     await writeFile(
       join(scriptDir, "run.sh"),

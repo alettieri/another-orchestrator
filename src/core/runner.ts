@@ -494,6 +494,10 @@ export function createRunner(
       }
     }
 
+    if (current.status === "complete") {
+      await stateManager.maybeMarkPlanComplete(current.planId);
+    }
+
     return current;
   }
 
