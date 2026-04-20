@@ -11,6 +11,40 @@ import type {
 import { StatusBadge } from "../components/StatusBadge.js";
 import { type Column, Table } from "../components/Table.js";
 
+interface SessionCopyCellProps {
+  sessionId: string | null;
+  isSelected: boolean;
+}
+
+function SessionCopyCell({
+  sessionId,
+  isSelected,
+}: SessionCopyCellProps): React.ReactElement {
+  const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    },
+    [],
+  );
+
+  useInput((input) => {
+    if (!isSelected || input !== "c" || !sessionId) return;
+    execSync(`echo -n ${JSON.stringify(sessionId)} | pbcopy`);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    setCopied(true);
+    timeoutRef.current = setTimeout(() => setCopied(false), 1500);
+  });
+
+  if (copied) return <Text color="green">Copied!</Text>;
+  if (!sessionId) return <Text dimColor>—</Text>;
+  const display =
+    sessionId.length > 10 ? `${sessionId.slice(0, 10)}…` : sessionId;
+  return <Text>{display}</Text>;
+}
+
 interface TicketsScreenProps {
   plan: PlanFile;
   tickets: TicketState[];
@@ -102,45 +136,12 @@ export function TicketsScreen({
   height,
 }: TicketsScreenProps): React.ReactElement {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [copied, setCopied] = useState(false);
-  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-    },
-    [],
-  );
-
-  useInput((input) => {
-    if (input === "c") {
-      const ticket = tickets[selectedIndex];
-      if (!ticket) return;
-      const sessionId = getLatestSessionId(ticket);
-      if (!sessionId) return;
-      execSync(`echo -n ${JSON.stringify(sessionId)} | pbcopy`);
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-      setCopied(true);
-      copyTimeoutRef.current = setTimeout(() => setCopied(false), 1500);
-    }
-  });
 
   const rows = useMemo(() => {
     return tickets.map((ticket, index) => {
       const retryCount = getRetryCount(ticket);
       const blockedBy = getBlockedBy(plan, ticket.ticketId);
       const sessionId = getLatestSessionId(ticket);
-
-      let sessionCell: React.ReactElement;
-      if (copied && index === selectedIndex) {
-        sessionCell = <Text color="green">Copied!</Text>;
-      } else if (sessionId) {
-        const display =
-          sessionId.length > 10 ? `${sessionId.slice(0, 10)}…` : sessionId;
-        sessionCell = <Text>{display}</Text>;
-      } else {
-        sessionCell = <Text dimColor>—</Text>;
-      }
 
       return {
         ticket: ticket.ticketId,
@@ -153,10 +154,15 @@ export function TicketsScreen({
         ),
         block: <Text dimColor={blockedBy === "—"}>{blockedBy}</Text>,
         age: formatAge(ticket),
-        session: sessionCell,
+        session: (
+          <SessionCopyCell
+            sessionId={sessionId}
+            isSelected={index === selectedIndex}
+          />
+        ),
       };
     });
-  }, [tickets, plan, workflows, copied, selectedIndex]);
+  }, [tickets, plan, workflows, selectedIndex]);
 
   if (tickets.length === 0) {
     return (
