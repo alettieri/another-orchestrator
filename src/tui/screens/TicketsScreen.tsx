@@ -7,6 +7,7 @@ import type {
   TicketState,
   WorkflowDefinition,
 } from "../../core/types.js";
+import { SessionCopyCell } from "../components/SessionCopyCell.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { type Column, Table } from "../components/Table.js";
 
@@ -71,6 +72,13 @@ function getRetryCount(ticket: TicketState): number {
   return Object.values(ticket.retries).reduce<number>((sum, n) => sum + n, 0);
 }
 
+export function getLatestSessionId(ticket: TicketState): string | null {
+  const entry = [...ticket.phaseHistory]
+    .reverse()
+    .find((e) => e.sessionId !== undefined);
+  return entry?.sessionId ?? null;
+}
+
 function getBlockedBy(plan: PlanFile, ticketId: string): string {
   const entry = plan.tickets.find((t) => t.ticketId === ticketId);
   if (!entry || entry.blockedBy.length === 0) return "—";
@@ -84,6 +92,7 @@ const COLUMNS: Column[] = [
   { key: "retry", label: "RETRY", width: 8 },
   { key: "block", label: "BLOCK", width: 16 },
   { key: "age", label: "AGE", width: 8 },
+  { key: "session", label: "SESSION", width: 14 },
 ];
 
 export function TicketsScreen({
@@ -95,9 +104,10 @@ export function TicketsScreen({
   const [selectedIndex, setSelectedIndex] = useState(0);
 
   const rows = useMemo(() => {
-    return tickets.map((ticket) => {
+    return tickets.map((ticket, index) => {
       const retryCount = getRetryCount(ticket);
       const blockedBy = getBlockedBy(plan, ticket.ticketId);
+      const sessionId = getLatestSessionId(ticket);
 
       return {
         ticket: ticket.ticketId,
@@ -110,9 +120,15 @@ export function TicketsScreen({
         ),
         block: <Text dimColor={blockedBy === "—"}>{blockedBy}</Text>,
         age: formatAge(ticket),
+        session: (
+          <SessionCopyCell
+            sessionId={sessionId}
+            isSelected={index === selectedIndex}
+          />
+        ),
       };
     });
-  }, [tickets, plan, workflows]);
+  }, [tickets, plan, workflows, selectedIndex]);
 
   if (tickets.length === 0) {
     return (

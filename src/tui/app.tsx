@@ -36,6 +36,7 @@ const TICKETS_HOTKEYS: Hotkey[] = [
   { key: "⏎", label: "open" },
   { key: "esc", label: "back" },
   { key: "/", label: "filter" },
+  { key: "c", label: "copy session" },
   { key: "q", label: "quit" },
 ];
 
