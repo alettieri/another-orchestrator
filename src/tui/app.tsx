@@ -3,7 +3,6 @@ import { Box, useApp, useInput, useStdout } from "ink";
 import { useCallback, useMemo } from "react";
 import type { StateManager } from "../core/state.js";
 import type { TicketState } from "../core/types.js";
-import type { WorkflowLoader } from "../core/workflow.js";
 import { Breadcrumb } from "./components/Breadcrumb.js";
 import { Footer, type Hotkey } from "./components/Footer.js";
 import { Header } from "./components/Header.js";
@@ -13,7 +12,6 @@ import {
   useStateWatcher,
   useTicketsByPlan,
 } from "./hooks/useStateData.js";
-import { useWorkflows } from "./hooks/useWorkflows.js";
 import { queryClient } from "./queries/query-client.js";
 import { PlansScreen } from "./screens/PlansScreen.js";
 import { TicketsScreen } from "./screens/TicketsScreen.js";
@@ -21,7 +19,6 @@ import { TicketsScreen } from "./screens/TicketsScreen.js";
 interface AppProps {
   stateManager: StateManager;
   stateDir: string;
-  workflowLoader?: WorkflowLoader;
 }
 
 const PLANS_HOTKEYS: Hotkey[] = [
@@ -48,19 +45,15 @@ function countRunning(ticketsByPlan: Map<string, TicketState[]>): number {
   );
 }
 
-export function App({ stateManager, stateDir, workflowLoader }: AppProps) {
+export function App({ stateManager, stateDir }: AppProps) {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppInner
-        stateManager={stateManager}
-        stateDir={stateDir}
-        workflowLoader={workflowLoader}
-      />
+      <AppInner stateManager={stateManager} stateDir={stateDir} />
     </QueryClientProvider>
   );
 }
 
-function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
+function AppInner({ stateManager, stateDir }: AppProps) {
   const { exit } = useApp();
   const { stdout } = useStdout();
 
@@ -80,15 +73,6 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
     currentScreen.type === "tickets"
       ? (ticketsByPlan.get(currentScreen.planId) ?? [])
       : [];
-
-  const workflowNames = useMemo(
-    () => selectedTickets.map((t) => t.workflow),
-    [selectedTickets],
-  );
-  const { data: workflows = new Map() } = useWorkflows(
-    workflowLoader,
-    workflowNames,
-  );
 
   // Global keys
   useInput(
@@ -130,7 +114,6 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
           <TicketsScreen
             plan={selectedPlan}
             tickets={selectedTickets}
-            workflows={workflows}
             height={tableHeight}
           />
         ) : (
