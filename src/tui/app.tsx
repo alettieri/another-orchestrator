@@ -6,12 +6,10 @@ import type { TicketState } from "../core/types.js";
 import { Breadcrumb } from "./components/Breadcrumb.js";
 import { Footer, type Hotkey } from "./components/Footer.js";
 import { Header } from "./components/Header.js";
+import { usePlans } from "./hooks/usePlans.js";
 import { useScreen } from "./hooks/useScreen.js";
-import {
-  usePlans,
-  useStateWatcher,
-  useTicketsByPlan,
-} from "./hooks/useStateData.js";
+import { useStateWatcher } from "./hooks/useStateWatcher.js";
+import { useTicketsByPlan } from "./hooks/useTicketsByPlan.js";
 import { queryClient } from "./queries/query-client.js";
 import { PlansScreen } from "./screens/PlansScreen.js";
 import { TicketsScreen } from "./screens/TicketsScreen.js";
