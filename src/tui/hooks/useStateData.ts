@@ -41,7 +41,7 @@ export function useStateWatcher(stateDir: string) {
 
     const watcher = watch(stateDir, {
       ignoreInitial: true,
-      depth: 2,
+      depth: 3,
     });
 
     watcher.on("all", () => {
