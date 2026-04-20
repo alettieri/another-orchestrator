@@ -1,4 +1,3 @@
-import chalk from "chalk";
 import { Box, Text } from "ink";
 import type React from "react";
 import { useMemo, useState } from "react";
@@ -10,6 +9,8 @@ import type {
 import { SessionCopyCell } from "../components/SessionCopyCell.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { type Column, Table } from "../components/Table.js";
+import { PHASE_LABELS } from "../constants/phase.js";
+import type { PhaseId } from "../types/phase.js";
 
 interface TicketsScreenProps {
   plan: PlanFile;
@@ -17,13 +18,6 @@ interface TicketsScreenProps {
   workflows: Map<string, WorkflowDefinition>;
   height?: number;
 }
-
-const PHASE_COLORS: Record<string, (text: string) => string> = {
-  agent: chalk.hex("#818cf8"),
-  script: chalk.hex("#a3e635"),
-  poll: chalk.hex("#e879f9"),
-  terminal: chalk.hex("#facc15"),
-};
 
 function formatAge(ticket: TicketState): string {
   // Use the latest phase history entry's startedAt, or fall back to first entry
@@ -50,22 +44,13 @@ function formatAge(ticket: TicketState): string {
   return `${days}d`;
 }
 
-function formatPhase(
-  ticket: TicketState,
-  workflows: Map<string, WorkflowDefinition>,
-): React.ReactElement {
-  const workflow = workflows.get(ticket.workflow);
-  if (!workflow) return <Text dimColor>—</Text>;
+function formatPhase(ticket: TicketState): React.ReactElement {
+  const { currentPhase } = ticket;
+  if (!currentPhase) return <Text dimColor>—</Text>;
 
-  const phases = workflow.phases;
-  const phaseIndex = phases.findIndex((p) => p.id === ticket.currentPhase);
-  if (phaseIndex === -1) return <Text dimColor>—</Text>;
+  const label = PHASE_LABELS[currentPhase as PhaseId] ?? currentPhase;
 
-  const phase = phases[phaseIndex];
-  const colorFn = PHASE_COLORS[phase.type];
-  const typeStr = colorFn ? colorFn(phase.type) : phase.type;
-
-  return <Text>{`${typeStr} ${phaseIndex + 1}/${phases.length}`}</Text>;
+  return <Text>{label}</Text>;
 }
 
 function getRetryCount(ticket: TicketState): number {
@@ -98,7 +83,7 @@ const COLUMNS: Column[] = [
 export function TicketsScreen({
   plan,
   tickets,
-  workflows,
+  workflows: _workflows,
   height,
 }: TicketsScreenProps): React.ReactElement {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -112,7 +97,7 @@ export function TicketsScreen({
       return {
         ticket: ticket.ticketId,
         status: <StatusBadge status={ticket.status} />,
-        phase: formatPhase(ticket, workflows),
+        phase: formatPhase(ticket),
         retry: (
           <Text color={retryCount > 0 ? "yellow" : undefined}>
             {retryCount > 0 ? String(retryCount) : "—"}
@@ -128,7 +113,7 @@ export function TicketsScreen({
         ),
       };
     });
-  }, [tickets, plan, workflows, selectedIndex]);
+  }, [tickets, plan, selectedIndex]);
 
   if (tickets.length === 0) {
     return (

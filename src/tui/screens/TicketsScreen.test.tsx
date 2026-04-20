@@ -142,7 +142,7 @@ describe("TicketsScreen", () => {
     unmount();
   });
 
-  it("renders phase with index/total", () => {
+  it("renders human-readable phase label", () => {
     const plan = makePlan();
     const tickets = [
       makeTicket({ ticketId: "T-1", currentPhase: "implement" }),
@@ -159,8 +159,7 @@ describe("TicketsScreen", () => {
     );
 
     const frame = lastFrame();
-    // "implement" is phase index 1 (0-based), displayed as 2/3
-    expect(frame).toContain("2/3");
+    expect(frame).toContain("Implement");
     unmount();
   });
 
@@ -346,9 +345,9 @@ describe("TicketsScreen", () => {
     unmount();
   });
 
-  it("shows dash for phase when workflow is not loaded", () => {
+  it("falls back to raw phase ID for unknown phases", () => {
     const plan = makePlan();
-    const tickets = [makeTicket()];
+    const tickets = [makeTicket({ currentPhase: "unknown_phase" as never })];
     const workflows = new Map<string, WorkflowDefinition>();
 
     const { lastFrame, unmount } = renderWithQuery(
@@ -361,7 +360,7 @@ describe("TicketsScreen", () => {
     );
 
     const frame = lastFrame();
-    expect(frame).toContain("—");
+    expect(frame).toContain("unknown_phase");
     unmount();
   });
 });
