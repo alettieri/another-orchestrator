@@ -49,6 +49,7 @@ function buildProgressBar(
 }
 
 const COLUMNS: Column[] = [
+  { key: "id", label: "ID", width: 20 },
   { key: "name", label: "NAME", width: 30 },
   { key: "status", label: "STATUS", width: 12 },
   { key: "progress", label: "PROGRESS", width: 22 },
@@ -75,6 +76,7 @@ export function PlansScreen({
       ).length;
 
       return {
+        id: plan.id,
         name: plan.name,
         status: <StatusBadge status={plan.status} />,
         progress: buildProgressBar(completed, tickets.length),
