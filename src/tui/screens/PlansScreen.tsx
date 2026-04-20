@@ -1,6 +1,7 @@
-import { Box, Text } from "ink";
+import { Box, Text, useInput } from "ink";
 import type React from "react";
 import { useMemo, useState } from "react";
+import type { StateManager } from "../../core/state.js";
 import type { PlanFile, TicketState } from "../../core/types.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { type Column, Table } from "../components/Table.js";
@@ -8,6 +9,7 @@ import { type Column, Table } from "../components/Table.js";
 interface PlansScreenProps {
   plans: PlanFile[];
   ticketsByPlan: Map<string, TicketState[]>;
+  stateManager: StateManager;
   onSelectPlan: (planId: string) => void;
   height?: number;
 }
@@ -61,10 +63,20 @@ const COLUMNS: Column[] = [
 export function PlansScreen({
   plans,
   ticketsByPlan,
+  stateManager,
   onSelectPlan,
   height,
 }: PlansScreenProps): React.ReactElement {
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  useInput((input) => {
+    if (input !== "p" && input !== "r") return;
+    const plan = plans[selectedIndex];
+    if (!plan) return;
+    const nextStatus = input === "p" ? "paused" : "active";
+    if (plan.status === nextStatus) return;
+    void stateManager.savePlan({ ...plan, status: nextStatus });
+  });
 
   const rows = useMemo(() => {
     return plans.map((plan) => {

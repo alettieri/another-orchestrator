@@ -1,7 +1,12 @@
-import { Box, Text } from "ink";
+import { Box, Text, useInput } from "ink";
 import type React from "react";
 import { useMemo, useState } from "react";
-import type { PlanFile, TicketState } from "../../core/types.js";
+import type { StateManager } from "../../core/state.js";
+import type {
+  PlanFile,
+  TicketState,
+  WorkflowDefinition,
+} from "../../core/types.js";
 import { SessionCopyCell } from "../components/SessionCopyCell.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { type Column, Table } from "../components/Table.js";
@@ -11,6 +16,8 @@ import type { PhaseId } from "../types/phase.js";
 interface TicketsScreenProps {
   plan: PlanFile;
   tickets: TicketState[];
+  workflows: Map<string, WorkflowDefinition>;
+  stateManager: StateManager;
   height?: number;
 }
 
@@ -67,6 +74,17 @@ function getBlockedBy(plan: PlanFile, ticketId: string): string {
   return entry.blockedBy.join(", ");
 }
 
+export function computeSkipUpdate(
+  ticket: TicketState,
+  workflows: Map<string, WorkflowDefinition>,
+): Pick<TicketState, "currentPhase" | "status"> | null {
+  const workflow = workflows.get(ticket.workflow);
+  if (!workflow) return null;
+  const phase = workflow.phases.find((p) => p.id === ticket.currentPhase);
+  if (!phase?.onSuccess) return null;
+  return { currentPhase: phase.onSuccess, status: "ready" };
+}
+
 const COLUMNS: Column[] = [
   { key: "ticket", label: "TICKET", width: 24 },
   { key: "status", label: "STATUS", width: 18 },
@@ -80,9 +98,30 @@ const COLUMNS: Column[] = [
 export function TicketsScreen({
   plan,
   tickets,
+  workflows,
+  stateManager,
   height,
 }: TicketsScreenProps): React.ReactElement {
   const [selectedIndex, setSelectedIndex] = useState(0);
+
+  useInput((input) => {
+    if (input !== "p" && input !== "r" && input !== "s") return;
+    const ticket = tickets[selectedIndex];
+    if (!ticket) return;
+
+    if (input === "s") {
+      const skipUpdate = computeSkipUpdate(ticket, workflows);
+      if (!skipUpdate) return;
+      void stateManager.updateTicket(plan.id, ticket.ticketId, skipUpdate);
+      return;
+    }
+
+    const nextStatus = input === "p" ? "paused" : "ready";
+    if (ticket.status === nextStatus) return;
+    void stateManager.updateTicket(plan.id, ticket.ticketId, {
+      status: nextStatus,
+    });
+  });
 
   const rows = useMemo(() => {
     return tickets.map((ticket, index) => {

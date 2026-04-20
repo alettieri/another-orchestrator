@@ -1,10 +1,19 @@
 import { QueryClientProvider } from "@tanstack/react-query";
 import { render } from "ink-testing-library";
 import type React from "react";
-import { describe, expect, it } from "vitest";
-import type { PlanFile, TicketState } from "../../core/types.js";
+import { describe, expect, it, vi } from "vitest";
+import type { StateManager } from "../../core/state.js";
+import type {
+  PlanFile,
+  TicketState,
+  WorkflowDefinition,
+} from "../../core/types.js";
 import { queryClient } from "../queries/query-client.js";
-import { getLatestSessionId, TicketsScreen } from "./TicketsScreen.js";
+import {
+  computeSkipUpdate,
+  getLatestSessionId,
+  TicketsScreen,
+} from "./TicketsScreen.js";
 
 function makePlan(overrides: Partial<PlanFile> = {}): PlanFile {
   return {
@@ -55,10 +64,68 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
   };
 }
 
-function renderWithQuery(element: React.ReactElement) {
-  return render(
-    <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
+function makeWorkflow(
+  overrides: Partial<WorkflowDefinition> = {},
+): WorkflowDefinition {
+  return {
+    name: "standard",
+    description: "",
+    tags: [],
+    phases: [
+      {
+        id: "implement",
+        type: "agent",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+        onSuccess: "verify",
+      },
+      {
+        id: "verify",
+        type: "agent",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+      },
+    ],
+    ...overrides,
+  };
+}
+
+function makeStateManager(): StateManager {
+  return {
+    listPlans: vi.fn().mockResolvedValue([]),
+    getPlan: vi.fn().mockResolvedValue(null),
+    savePlan: vi.fn().mockResolvedValue(undefined),
+    listTickets: vi.fn().mockResolvedValue([]),
+    getTicket: vi.fn().mockResolvedValue(null),
+    saveTicket: vi.fn().mockResolvedValue(undefined),
+    updateTicket: vi.fn().mockResolvedValue({}),
+    getReadyTickets: vi.fn().mockResolvedValue([]),
+    getRunningCount: vi.fn().mockResolvedValue(0),
+    resolveDependencies: vi.fn().mockResolvedValue(undefined),
+    maybeMarkPlanComplete: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
+function renderTicketsScreen(
+  props: Partial<React.ComponentProps<typeof TicketsScreen>> & {
+    plan: PlanFile;
+    tickets: TicketState[];
+  },
+) {
+  const element = (
+    <QueryClientProvider client={queryClient}>
+      <TicketsScreen
+        workflows={props.workflows ?? new Map()}
+        stateManager={props.stateManager ?? makeStateManager()}
+        height={props.height}
+        plan={props.plan}
+        tickets={props.tickets}
+      />
+    </QueryClientProvider>
   );
+  return render(element);
 }
 
 describe("TicketsScreen", () => {
@@ -66,9 +133,11 @@ describe("TicketsScreen", () => {
     const plan = makePlan();
     const tickets = [makeTicket()];
 
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
 
     const frame = lastFrame();
     expect(frame).toContain("TICKET");
@@ -84,9 +153,11 @@ describe("TicketsScreen", () => {
     const plan = makePlan();
     const tickets = [makeTicket({ ticketId: "T-1", status: "running" })];
 
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
 
     const frame = lastFrame();
     expect(frame).toContain("T-1");
@@ -100,9 +171,11 @@ describe("TicketsScreen", () => {
       makeTicket({ ticketId: "T-1", currentPhase: "implement" }),
     ];
 
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
 
     const frame = lastFrame();
     expect(frame).toContain("implement");
@@ -119,9 +192,11 @@ describe("TicketsScreen", () => {
       }),
     ];
 
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
 
     const frame = lastFrame();
     expect(frame).toContain("2");
@@ -132,9 +207,11 @@ describe("TicketsScreen", () => {
     const plan = makePlan();
     const tickets = [makeTicket({ retries: {} })];
 
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
 
     const frame = lastFrame();
     // The RETRY column should show a dash
@@ -154,9 +231,11 @@ describe("TicketsScreen", () => {
       makeTicket({ ticketId: "T-2", status: "queued" }),
     ];
 
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
 
     const frame = lastFrame();
     expect(frame).toContain("T-1");
@@ -167,9 +246,10 @@ describe("TicketsScreen", () => {
   it("shows empty state when no tickets", () => {
     const plan = makePlan({ tickets: [] });
 
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={[]} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets: [],
+    });
 
     expect(lastFrame()).toContain("No tickets found");
     unmount();
@@ -179,9 +259,11 @@ describe("TicketsScreen", () => {
     const plan = makePlan();
     const tickets = [makeTicket()];
 
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
 
     expect(lastFrame()).toContain("SESSION");
     unmount();
@@ -202,9 +284,11 @@ describe("TicketsScreen", () => {
         ],
       }),
     ];
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
 
     expect(lastFrame()).toContain("abc123defg…");
     unmount();
@@ -214,9 +298,11 @@ describe("TicketsScreen", () => {
     const plan = makePlan();
     const tickets = [makeTicket({ phaseHistory: [] })];
 
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
 
     expect(lastFrame()).toContain("—");
     unmount();
@@ -237,9 +323,11 @@ describe("TicketsScreen", () => {
         ],
       }),
     ];
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
 
     expect(lastFrame()).toContain("abc123");
     expect(lastFrame()).not.toContain("…");
@@ -250,9 +338,11 @@ describe("TicketsScreen", () => {
     const plan = makePlan();
     const tickets = [makeTicket({ currentPhase: "unknown_phase" as never })];
 
-    const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
-    );
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
 
     const frame = lastFrame();
     expect(frame).toContain("unknown_phase");
@@ -321,5 +411,38 @@ describe("getLatestSessionId", () => {
       ],
     });
     expect(getLatestSessionId(ticket)).toBe("only");
+  });
+});
+
+describe("computeSkipUpdate", () => {
+  it("returns next phase and ready status when current phase has onSuccess", () => {
+    const ticket = makeTicket({ currentPhase: "implement" });
+    const workflows = new Map([["standard", makeWorkflow()]]);
+
+    expect(computeSkipUpdate(ticket, workflows)).toEqual({
+      currentPhase: "verify",
+      status: "ready",
+    });
+  });
+
+  it("returns null when the current phase has no onSuccess (terminal)", () => {
+    const ticket = makeTicket({ currentPhase: "verify" });
+    const workflows = new Map([["standard", makeWorkflow()]]);
+
+    expect(computeSkipUpdate(ticket, workflows)).toBeNull();
+  });
+
+  it("returns null when the workflow is not in the workflows map", () => {
+    const ticket = makeTicket({ workflow: "missing" });
+    const workflows = new Map([["standard", makeWorkflow()]]);
+
+    expect(computeSkipUpdate(ticket, workflows)).toBeNull();
+  });
+
+  it("returns null when the phase id is not found in the workflow", () => {
+    const ticket = makeTicket({ currentPhase: "nonexistent_phase" });
+    const workflows = new Map([["standard", makeWorkflow()]]);
+
+    expect(computeSkipUpdate(ticket, workflows)).toBeNull();
   });
 });
