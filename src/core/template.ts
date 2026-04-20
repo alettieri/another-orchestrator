@@ -12,8 +12,8 @@ function buildContext(ticket: TicketState): Record<string, unknown> {
     .join("\n");
 
   return {
-    ...ticket,
     ...ticket.context,
+    ...ticket,
     acceptance_criteria_list: acceptanceCriteriaList,
     linearUrl: ticket.linearUrl ?? "",
   };

@@ -16,6 +16,8 @@ if [[ ! -d "$WORKTREE_PATH" ]]; then
   exit 0
 fi
 
+echo "Cleaing worktree ${WORKTREE_PATH}"
+
 REPO_ROOT="$(git -C "$WORKTREE_PATH" rev-parse --git-common-dir)"
 REPO_ROOT="$(cd "$(dirname "$REPO_ROOT")" && pwd)"
 

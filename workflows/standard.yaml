@@ -10,8 +10,6 @@ phases:
       - "{{ repo }}"
       - "{{ branch }}"
       - "{{ worktree }}"
-    capture:
-      worktree: stdout
     onSuccess: implement
     onFailure: abort
 
