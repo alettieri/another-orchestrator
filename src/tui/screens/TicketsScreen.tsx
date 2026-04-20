@@ -1,49 +1,15 @@
-import { execSync } from "node:child_process";
 import chalk from "chalk";
-import { Box, Text, useInput } from "ink";
+import { Box, Text } from "ink";
 import type React from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   PlanFile,
   TicketState,
   WorkflowDefinition,
 } from "../../core/types.js";
+import { SessionCopyCell } from "../components/SessionCopyCell.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { type Column, Table } from "../components/Table.js";
-
-interface SessionCopyCellProps {
-  sessionId: string | null;
-  isSelected: boolean;
-}
-
-function SessionCopyCell({
-  sessionId,
-  isSelected,
-}: SessionCopyCellProps): React.ReactElement {
-  const [copied, setCopied] = useState(false);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(
-    () => () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    },
-    [],
-  );
-
-  useInput((input) => {
-    if (!isSelected || input !== "c" || !sessionId) return;
-    execSync(`echo -n ${JSON.stringify(sessionId)} | pbcopy`);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setCopied(true);
-    timeoutRef.current = setTimeout(() => setCopied(false), 1500);
-  });
-
-  if (copied) return <Text color="green">Copied!</Text>;
-  if (!sessionId) return <Text dimColor>—</Text>;
-  const display =
-    sessionId.length > 10 ? `${sessionId.slice(0, 10)}…` : sessionId;
-  return <Text>{display}</Text>;
-}
 
 interface TicketsScreenProps {
   plan: PlanFile;
