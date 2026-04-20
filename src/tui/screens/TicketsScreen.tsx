@@ -1,11 +1,7 @@
 import { Box, Text } from "ink";
 import type React from "react";
 import { useMemo, useState } from "react";
-import type {
-  PlanFile,
-  TicketState,
-  WorkflowDefinition,
-} from "../../core/types.js";
+import type { PlanFile, TicketState } from "../../core/types.js";
 import { SessionCopyCell } from "../components/SessionCopyCell.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { type Column, Table } from "../components/Table.js";
@@ -15,7 +11,6 @@ import type { PhaseId } from "../types/phase.js";
 interface TicketsScreenProps {
   plan: PlanFile;
   tickets: TicketState[];
-  workflows: Map<string, WorkflowDefinition>;
   height?: number;
 }
 
@@ -83,7 +78,6 @@ const COLUMNS: Column[] = [
 export function TicketsScreen({
   plan,
   tickets,
-  workflows: _workflows,
   height,
 }: TicketsScreenProps): React.ReactElement {
   const [selectedIndex, setSelectedIndex] = useState(0);

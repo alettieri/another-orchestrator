@@ -2,11 +2,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { render } from "ink-testing-library";
 import type React from "react";
 import { describe, expect, it } from "vitest";
-import type {
-  PlanFile,
-  TicketState,
-  WorkflowDefinition,
-} from "../../core/types.js";
+import type { PlanFile, TicketState } from "../../core/types.js";
 import { queryClient } from "../queries/query-client.js";
 import { getLatestSessionId, TicketsScreen } from "./TicketsScreen.js";
 
@@ -59,38 +55,6 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
   };
 }
 
-const standardWorkflow: WorkflowDefinition = {
-  name: "standard",
-  description: "Standard workflow",
-  tags: [],
-  phases: [
-    {
-      id: "setup",
-      type: "script",
-      command: "echo setup",
-      args: [],
-      maxRetries: 0,
-      notify: false,
-    },
-    {
-      id: "implement",
-      type: "agent",
-      args: [],
-      promptTemplate: "implement.md",
-      maxRetries: 0,
-      notify: false,
-    },
-    {
-      id: "verify",
-      type: "script",
-      command: "echo verify",
-      args: [],
-      maxRetries: 0,
-      notify: false,
-    },
-  ],
-};
-
 function renderWithQuery(element: React.ReactElement) {
   return render(
     <QueryClientProvider client={queryClient}>{element}</QueryClientProvider>,
@@ -101,15 +65,9 @@ describe("TicketsScreen", () => {
   it("renders ticket table with correct column headers", () => {
     const plan = makePlan();
     const tickets = [makeTicket()];
-    const workflows = new Map([["standard", standardWorkflow]]);
 
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen
-        plan={plan}
-        tickets={tickets}
-        workflows={workflows}
-        height={10}
-      />,
+      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
     );
 
     const frame = lastFrame();
@@ -125,15 +83,9 @@ describe("TicketsScreen", () => {
   it("renders ticket ID and status", () => {
     const plan = makePlan();
     const tickets = [makeTicket({ ticketId: "T-1", status: "running" })];
-    const workflows = new Map([["standard", standardWorkflow]]);
 
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen
-        plan={plan}
-        tickets={tickets}
-        workflows={workflows}
-        height={10}
-      />,
+      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
     );
 
     const frame = lastFrame();
@@ -147,15 +99,9 @@ describe("TicketsScreen", () => {
     const tickets = [
       makeTicket({ ticketId: "T-1", currentPhase: "implement" }),
     ];
-    const workflows = new Map([["standard", standardWorkflow]]);
 
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen
-        plan={plan}
-        tickets={tickets}
-        workflows={workflows}
-        height={10}
-      />,
+      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
     );
 
     const frame = lastFrame();
@@ -172,15 +118,9 @@ describe("TicketsScreen", () => {
         retries: { implement: 2 },
       }),
     ];
-    const workflows = new Map([["standard", standardWorkflow]]);
 
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen
-        plan={plan}
-        tickets={tickets}
-        workflows={workflows}
-        height={10}
-      />,
+      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
     );
 
     const frame = lastFrame();
@@ -191,15 +131,9 @@ describe("TicketsScreen", () => {
   it("shows dash for retry when count is 0", () => {
     const plan = makePlan();
     const tickets = [makeTicket({ retries: {} })];
-    const workflows = new Map([["standard", standardWorkflow]]);
 
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen
-        plan={plan}
-        tickets={tickets}
-        workflows={workflows}
-        height={10}
-      />,
+      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
     );
 
     const frame = lastFrame();
@@ -219,15 +153,9 @@ describe("TicketsScreen", () => {
       makeTicket({ ticketId: "T-1" }),
       makeTicket({ ticketId: "T-2", status: "queued" }),
     ];
-    const workflows = new Map([["standard", standardWorkflow]]);
 
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen
-        plan={plan}
-        tickets={tickets}
-        workflows={workflows}
-        height={10}
-      />,
+      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
     );
 
     const frame = lastFrame();
@@ -238,10 +166,9 @@ describe("TicketsScreen", () => {
 
   it("shows empty state when no tickets", () => {
     const plan = makePlan({ tickets: [] });
-    const workflows = new Map([["standard", standardWorkflow]]);
 
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen plan={plan} tickets={[]} workflows={workflows} />,
+      <TicketsScreen plan={plan} tickets={[]} />,
     );
 
     expect(lastFrame()).toContain("No tickets found");
@@ -251,15 +178,9 @@ describe("TicketsScreen", () => {
   it("renders SESSION column header", () => {
     const plan = makePlan();
     const tickets = [makeTicket()];
-    const workflows = new Map([["standard", standardWorkflow]]);
 
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen
-        plan={plan}
-        tickets={tickets}
-        workflows={workflows}
-        height={10}
-      />,
+      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
     );
 
     expect(lastFrame()).toContain("SESSION");
@@ -281,15 +202,8 @@ describe("TicketsScreen", () => {
         ],
       }),
     ];
-    const workflows = new Map([["standard", standardWorkflow]]);
-
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen
-        plan={plan}
-        tickets={tickets}
-        workflows={workflows}
-        height={10}
-      />,
+      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
     );
 
     expect(lastFrame()).toContain("abc123defg…");
@@ -299,15 +213,9 @@ describe("TicketsScreen", () => {
   it("shows dash dimmed when no session ID", () => {
     const plan = makePlan();
     const tickets = [makeTicket({ phaseHistory: [] })];
-    const workflows = new Map([["standard", standardWorkflow]]);
 
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen
-        plan={plan}
-        tickets={tickets}
-        workflows={workflows}
-        height={10}
-      />,
+      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
     );
 
     expect(lastFrame()).toContain("—");
@@ -329,15 +237,8 @@ describe("TicketsScreen", () => {
         ],
       }),
     ];
-    const workflows = new Map([["standard", standardWorkflow]]);
-
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen
-        plan={plan}
-        tickets={tickets}
-        workflows={workflows}
-        height={10}
-      />,
+      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
     );
 
     expect(lastFrame()).toContain("abc123");
@@ -348,15 +249,9 @@ describe("TicketsScreen", () => {
   it("falls back to raw phase ID for unknown phases", () => {
     const plan = makePlan();
     const tickets = [makeTicket({ currentPhase: "unknown_phase" as never })];
-    const workflows = new Map<string, WorkflowDefinition>();
 
     const { lastFrame, unmount } = renderWithQuery(
-      <TicketsScreen
-        plan={plan}
-        tickets={tickets}
-        workflows={workflows}
-        height={10}
-      />,
+      <TicketsScreen plan={plan} tickets={tickets} height={10} />,
     );
 
     const frame = lastFrame();
