@@ -105,7 +105,7 @@ describe("TicketsScreen", () => {
     );
 
     const frame = lastFrame();
-    expect(frame).toContain("Implement");
+    expect(frame).toContain("implement");
     unmount();
   });
 

@@ -5,7 +5,7 @@ import type { PlanFile, TicketState } from "../../core/types.js";
 import { SessionCopyCell } from "../components/SessionCopyCell.js";
 import { StatusBadge } from "../components/StatusBadge.js";
 import { type Column, Table } from "../components/Table.js";
-import { PHASE_LABELS } from "../constants/phase.js";
+import { PHASE_COLORS, PHASE_LABELS } from "../constants/phase.js";
 import type { PhaseId } from "../types/phase.js";
 
 interface TicketsScreenProps {
@@ -43,9 +43,11 @@ function formatPhase(ticket: TicketState): React.ReactElement {
   const { currentPhase } = ticket;
   if (!currentPhase) return <Text dimColor>—</Text>;
 
-  const label = PHASE_LABELS[currentPhase as PhaseId] ?? currentPhase;
+  const phaseId = currentPhase as PhaseId;
+  const label = PHASE_LABELS[phaseId] ?? currentPhase;
+  const color = PHASE_COLORS[phaseId];
 
-  return <Text>{label}</Text>;
+  return <Text color={color}>{label}</Text>;
 }
 
 function getRetryCount(ticket: TicketState): number {
