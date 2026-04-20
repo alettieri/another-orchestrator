@@ -36,6 +36,7 @@ Use this table to find the right reference material for your area of change:
 | Shell scripts | `scripts/` directory |
 | Configuration | `src/core/config.ts`, `skills/config/SKILL.md` |
 | Full architecture | `mvp.md` |
+| TUI components / screens | `src/tui/` — follow the architecture guidelines in `src/tui/architecture.md` |
 
 ## Step 3: Follow Project Conventions
 
