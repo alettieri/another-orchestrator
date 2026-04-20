@@ -212,6 +212,30 @@ describe("StateManager", () => {
       expect(ticket?.status).toBe("queued");
     });
 
+    it("marks plan complete when all tickets are complete", async () => {
+      const sm = createStateManager(stateDir);
+      await sm.savePlan(makePlan());
+      await sm.saveTicket(makeTicket({ ticketId: "t-1", status: "complete" }));
+      await sm.saveTicket(makeTicket({ ticketId: "t-2", status: "complete" }));
+
+      await sm.resolveDependencies("plan-1");
+
+      const plan = await sm.getPlan("plan-1");
+      expect(plan?.status).toBe("complete");
+    });
+
+    it("does not mark plan complete when tickets remain", async () => {
+      const sm = createStateManager(stateDir);
+      await sm.savePlan(makePlan());
+      await sm.saveTicket(makeTicket({ ticketId: "t-1", status: "complete" }));
+      await sm.saveTicket(makeTicket({ ticketId: "t-2", status: "running" }));
+
+      await sm.resolveDependencies("plan-1");
+
+      const plan = await sm.getPlan("plan-1");
+      expect(plan?.status).toBe("active");
+    });
+
     it("throws for nonexistent plan", async () => {
       const sm = createStateManager(stateDir);
       await expect(sm.resolveDependencies("nope")).rejects.toThrow(

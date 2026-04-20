@@ -198,6 +198,12 @@ export function createStateManager(stateDir: string): StateManager {
           });
         }
       }
+
+      const allComplete =
+        tickets.length > 0 && tickets.every((t) => t.status === "complete");
+      if (allComplete) {
+        await this.savePlan({ ...plan, status: "complete" });
+      }
     },
   };
 }
