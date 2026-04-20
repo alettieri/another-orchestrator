@@ -77,13 +77,7 @@ export function Table({
                 {typeof row[col.key] === "string" ? (
                   <Text inverse={isSelected}>{row[col.key] as string}</Text>
                 ) : (
-                  <Box>
-                    {isSelected ? (
-                      <Text inverse>{row[col.key]}</Text>
-                    ) : (
-                      row[col.key]
-                    )}
-                  </Box>
+                  <Box>{row[col.key]}</Box>
                 )}
               </Box>
             ))}
