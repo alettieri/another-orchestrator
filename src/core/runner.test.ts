@@ -74,6 +74,7 @@ phases:
       agent: null,
       status: "ready",
       currentPhase: "run_script",
+      currentSessionId: null,
       phaseHistory: [],
       context: {},
       retries: {},

@@ -124,6 +124,7 @@ export const TicketStateSchema = z.object({
   agent: z.string().nullable().default(null),
   status: TicketStatusSchema,
   currentPhase: z.string(),
+  currentSessionId: z.string().nullable().default(null),
   phaseHistory: z.array(PhaseHistoryEntrySchema).default([]),
   context: z.record(z.string(), z.string()).default({}),
   retries: z.record(z.string(), z.number()).default({}),

@@ -172,7 +172,12 @@ export function createRunner(
   const workflowLoader = createWorkflowLoader(config.workflowSearchPath);
   const templateRenderer = createTemplateRenderer(config.promptSearchPath);
   const logger = createLogger(config.logDir);
-  const phaseExecutor = createPhaseExecutor(config, templateRenderer, logger);
+  const phaseExecutor = createPhaseExecutor(
+    config,
+    templateRenderer,
+    logger,
+    stateManager,
+  );
   const processInspector =
     dependencies.processInspector ?? defaultProcessInspector;
 
@@ -250,6 +255,7 @@ export function createRunner(
           status: "failed",
           error: errorMsg,
           phaseHistory: [...ticket.phaseHistory, historyEntry],
+          currentSessionId: null,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -365,6 +371,7 @@ export function createRunner(
           phaseHistory: [...ticket.phaseHistory, historyEntry],
           context: newContext,
           error: null,
+          currentSessionId: null,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -385,6 +392,7 @@ export function createRunner(
           context: newContext,
           retries: newRetries,
           error: null,
+          currentSessionId: null,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -401,6 +409,7 @@ export function createRunner(
           phaseHistory: [...ticket.phaseHistory, historyEntry],
           context: newContext,
           error: null,
+          currentSessionId: null,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -415,6 +424,7 @@ export function createRunner(
         phaseHistory: [...ticket.phaseHistory, historyEntry],
         context: newContext,
         error: result.success ? null : "Phase failed without a next phase",
+        currentSessionId: null,
       },
     );
     return { ticket: updated, pendingPoll: false };

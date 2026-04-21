@@ -49,6 +49,7 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     agent: null,
     status: "running",
     currentPhase: "implement",
+    currentSessionId: null,
     phaseHistory: [
       {
         phase: "implement",
@@ -411,6 +412,57 @@ describe("getLatestSessionId", () => {
       ],
     });
     expect(getLatestSessionId(ticket)).toBe("only");
+  });
+
+  it("prefers currentSessionId over phaseHistory when ticket is running", () => {
+    const ticket = makeTicket({
+      status: "running",
+      currentSessionId: "live-session",
+      phaseHistory: [
+        {
+          phase: "implement",
+          status: "success",
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          sessionId: "old-session",
+        },
+      ],
+    });
+    expect(getLatestSessionId(ticket)).toBe("live-session");
+  });
+
+  it("falls back to phaseHistory when ticket is not running", () => {
+    const ticket = makeTicket({
+      status: "complete",
+      currentSessionId: null,
+      phaseHistory: [
+        {
+          phase: "implement",
+          status: "success",
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          sessionId: "history-session",
+        },
+      ],
+    });
+    expect(getLatestSessionId(ticket)).toBe("history-session");
+  });
+
+  it("falls back to phaseHistory when running but no currentSessionId is set", () => {
+    const ticket = makeTicket({
+      status: "running",
+      currentSessionId: null,
+      phaseHistory: [
+        {
+          phase: "implement",
+          status: "success",
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          sessionId: "history-session",
+        },
+      ],
+    });
+    expect(getLatestSessionId(ticket)).toBe("history-session");
   });
 });
 

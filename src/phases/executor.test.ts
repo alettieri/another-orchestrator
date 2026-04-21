@@ -34,6 +34,7 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     agent: "claude",
     status: "running",
     currentPhase: "run_script",
+    currentSessionId: null,
     phaseHistory: [],
     context: {},
     retries: {},

@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { invokeAgent } from "../agents/invoke.js";
 import { resolveAgent } from "../core/config.js";
+import type { StateManager } from "../core/state.js";
 import type { TemplateRenderer } from "../core/template.js";
 import {
   type OrchestratorConfig,
@@ -34,6 +35,7 @@ export function createPhaseExecutor(
   config: OrchestratorConfig,
   templateRenderer: TemplateRenderer,
   logger: Logger,
+  stateManager?: StateManager,
 ): PhaseExecutor {
   function resolveCwd(ticket: TicketState): string | undefined {
     const dir = ticket.worktree || undefined;
@@ -155,6 +157,17 @@ export function createPhaseExecutor(
       },
       {
         onOutput: (chunk) => log.trace(chunk),
+        onSessionId: async (sessionId) => {
+          if (!stateManager) return;
+          try {
+            await stateManager.updateTicket(ticket.planId, ticket.ticketId, {
+              currentSessionId: sessionId,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn(`Failed to persist currentSessionId: ${msg}`);
+          }
+        },
       },
       { signal },
     );

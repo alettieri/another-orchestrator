@@ -62,6 +62,9 @@ function getRetryCount(ticket: TicketState): number {
 }
 
 export function getLatestSessionId(ticket: TicketState): string | null {
+  if (ticket.status === "running" && ticket.currentSessionId) {
+    return ticket.currentSessionId;
+  }
   const entry = [...ticket.phaseHistory]
     .reverse()
     .find((e) => e.sessionId !== undefined);
