@@ -120,6 +120,7 @@ function renderTicketsScreen(
       <TicketsScreen
         workflows={props.workflows ?? new Map()}
         stateManager={props.stateManager ?? makeStateManager()}
+        onOpenTicket={props.onOpenTicket ?? (() => {})}
         height={props.height}
         plan={props.plan}
         tickets={props.tickets}
@@ -347,6 +348,62 @@ describe("TicketsScreen", () => {
 
     const frame = lastFrame();
     expect(frame).toContain("unknown_phase");
+    unmount();
+  });
+
+  it("calls onOpenTicket with the selected ticket's ticketId when 'd' is pressed", () => {
+    const plan = makePlan();
+    const tickets = [
+      makeTicket({ ticketId: "T-1" }),
+      makeTicket({ ticketId: "T-2" }),
+    ];
+    const onOpenTicket = vi.fn();
+
+    const { stdin, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      onOpenTicket,
+      height: 10,
+    });
+
+    stdin.write("d");
+    expect(onOpenTicket).toHaveBeenCalledWith("T-1");
+    unmount();
+  });
+
+  it("calls onOpenTicket with the selected ticket's ticketId when Enter is pressed", () => {
+    const plan = makePlan();
+    const tickets = [
+      makeTicket({ ticketId: "T-1" }),
+      makeTicket({ ticketId: "T-2" }),
+    ];
+    const onOpenTicket = vi.fn();
+
+    const { stdin, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      onOpenTicket,
+      height: 10,
+    });
+
+    stdin.write("\r");
+    expect(onOpenTicket).toHaveBeenCalledWith("T-1");
+    unmount();
+  });
+
+  it("does nothing on 'd' or Enter when tickets is empty", () => {
+    const plan = makePlan({ tickets: [] });
+    const onOpenTicket = vi.fn();
+
+    const { stdin, unmount } = renderTicketsScreen({
+      plan,
+      tickets: [],
+      onOpenTicket,
+    });
+
+    stdin.write("d");
+    stdin.write("\r");
+    expect(onOpenTicket).not.toHaveBeenCalled();
     unmount();
   });
 });

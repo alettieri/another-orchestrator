@@ -18,6 +18,7 @@ interface TicketsScreenProps {
   tickets: TicketState[];
   workflows: Map<string, WorkflowDefinition>;
   stateManager: StateManager;
+  onOpenTicket: (ticketId: string) => void;
   height?: number;
 }
 
@@ -103,14 +104,21 @@ export function TicketsScreen({
   tickets,
   workflows,
   stateManager,
+  onOpenTicket,
   height,
 }: TicketsScreenProps): React.ReactElement {
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  useInput((input) => {
-    if (input !== "p" && input !== "r" && input !== "s") return;
+  useInput((input, key) => {
     const ticket = tickets[selectedIndex];
     if (!ticket) return;
+
+    if (key.return || input === "d") {
+      onOpenTicket(ticket.ticketId);
+      return;
+    }
+
+    if (input !== "p" && input !== "r" && input !== "s") return;
 
     if (input === "s") {
       const skipUpdate = computeSkipUpdate(ticket, workflows);
