@@ -18,6 +18,7 @@ export interface AgentResult {
 
 export interface AgentCallbacks {
   onOutput?: (chunk: string) => void;
+  onSessionId?: (sessionId: string) => void | Promise<void>;
 }
 
 const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
@@ -30,7 +31,14 @@ export function buildAgentArgs(
   const { prompt, allowedTools } = invocation;
 
   if (command === "claude") {
-    const args = ["-p", prompt, "--output-format", "json", ...defaultArgs];
+    const args = [
+      "-p",
+      prompt,
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      ...defaultArgs,
+    ];
     if (allowedTools?.length) {
       args.push("--allowedTools", ...allowedTools);
     }
@@ -47,19 +55,66 @@ export function buildAgentArgs(
   return { command, args };
 }
 
-export function parseClaudeJsonOutput(raw: string): {
-  text: string;
-  sessionId?: string;
-} {
-  try {
-    const json = JSON.parse(raw);
-    const text = typeof json.result === "string" ? json.result : raw;
-    const sessionId =
-      typeof json.session_id === "string" ? json.session_id : undefined;
-    return { text, sessionId };
-  } catch {
-    return { text: raw };
+export function createClaudeStreamParser(options?: {
+  onSessionId?: (sessionId: string) => void | Promise<void>;
+}) {
+  let buffer = "";
+  let sessionId: string | undefined;
+  let finalText: string | undefined;
+
+  function handleLine(line: string): void {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    let event: unknown;
+    try {
+      event = JSON.parse(trimmed);
+    } catch {
+      return;
+    }
+
+    if (!event || typeof event !== "object") return;
+    const e = event as Record<string, unknown>;
+
+    if (
+      sessionId === undefined &&
+      e.type === "system" &&
+      e.subtype === "init" &&
+      typeof e.session_id === "string"
+    ) {
+      sessionId = e.session_id;
+      void options?.onSessionId?.(sessionId);
+      return;
+    }
+
+    if (e.type === "result" && typeof e.result === "string") {
+      finalText = e.result;
+    }
   }
+
+  return {
+    feed(chunk: string): void {
+      buffer += chunk;
+      let newlineIdx = buffer.indexOf("\n");
+      while (newlineIdx !== -1) {
+        handleLine(buffer.slice(0, newlineIdx));
+        buffer = buffer.slice(newlineIdx + 1);
+        newlineIdx = buffer.indexOf("\n");
+      }
+    },
+    end(): void {
+      if (buffer.length > 0) {
+        handleLine(buffer);
+        buffer = "";
+      }
+    },
+    get sessionId() {
+      return sessionId;
+    },
+    get finalText() {
+      return finalText;
+    },
+  };
 }
 
 export async function invokeAgent(
@@ -70,23 +125,38 @@ export async function invokeAgent(
 ): Promise<AgentResult> {
   const { command, args } = buildAgentArgs(agentConfig, invocation);
 
+  if (agentConfig.command === "claude") {
+    const parser = createClaudeStreamParser({
+      onSessionId: callbacks?.onSessionId,
+    });
+
+    const result = await execCommandStreaming(command, args, {
+      cwd: invocation.cwd || undefined,
+      timeoutMs: invocation.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      onStdout: (chunk) => {
+        callbacks?.onOutput?.(chunk);
+        parser.feed(chunk);
+      },
+      signal: options?.signal,
+    });
+
+    parser.end();
+
+    return {
+      stdout: parser.finalText ?? result.stdout,
+      stderr: result.stderr,
+      exitCode: result.exitCode,
+      success: result.exitCode === 0,
+      sessionId: parser.sessionId,
+    };
+  }
+
   const result = await execCommandStreaming(command, args, {
     cwd: invocation.cwd || undefined,
     timeoutMs: invocation.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     onStdout: callbacks?.onOutput,
     signal: options?.signal,
   });
-
-  if (agentConfig.command === "claude") {
-    const parsed = parseClaudeJsonOutput(result.stdout);
-    return {
-      stdout: parsed.text,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-      success: result.exitCode === 0,
-      sessionId: parsed.sessionId,
-    };
-  }
 
   return {
     stdout: result.stdout,
