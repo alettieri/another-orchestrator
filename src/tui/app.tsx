@@ -36,7 +36,7 @@ const TICKETS_HOTKEYS: Hotkey[] = [
   { key: "⏎", label: "open" },
   { key: "esc", label: "back" },
   { key: "/", label: "filter" },
-  { key: "c", label: "copy session" },
+  { key: "c", label: "copy resume cmd" },
   { key: "p", label: "pause" },
   { key: "r", label: "resume" },
   { key: "s", label: "skip" },

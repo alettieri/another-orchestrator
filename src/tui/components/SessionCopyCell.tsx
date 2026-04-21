@@ -24,7 +24,7 @@ export function SessionCopyCell({
 
   useInput((input) => {
     if (!isSelected || input !== "c" || !sessionId) return;
-    execSync(`echo -n ${JSON.stringify(sessionId)} | pbcopy`);
+    execSync("pbcopy", { input: `claude --resume ${sessionId}` });
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setCopied(true);
     timeoutRef.current = setTimeout(() => setCopied(false), 1500);
