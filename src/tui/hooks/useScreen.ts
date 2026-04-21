@@ -1,17 +1,27 @@
 import { useCallback, useReducer } from "react";
 
-type Screen = { type: "plans" } | { type: "tickets"; planId: string };
+type Screen =
+  | { type: "plans" }
+  | { type: "tickets"; planId: string }
+  | { type: "ticket-details"; planId: string; ticketId: string };
 
 type ScreenAction =
   | { type: "SHOW_PLANS" }
-  | { type: "SHOW_TICKETS"; planId: string };
+  | { type: "SHOW_TICKETS"; planId: string }
+  | { type: "SHOW_TICKET_DETAILS"; planId: string; ticketId: string };
 
-function screenReducer(_state: Screen, action: ScreenAction): Screen {
+export function screenReducer(_state: Screen, action: ScreenAction): Screen {
   switch (action.type) {
     case "SHOW_PLANS":
       return { type: "plans" };
     case "SHOW_TICKETS":
       return { type: "tickets", planId: action.planId };
+    case "SHOW_TICKET_DETAILS":
+      return {
+        type: "ticket-details",
+        planId: action.planId,
+        ticketId: action.ticketId,
+      };
   }
 }
 
@@ -27,12 +37,18 @@ export function useScreen() {
       dispatch({ type: "SHOW_TICKETS", planId }),
     [],
   );
+  const showTicketDetailsScreen = useCallback(
+    ({ planId, ticketId }: { planId: string; ticketId: string }) =>
+      dispatch({ type: "SHOW_TICKET_DETAILS", planId, ticketId }),
+    [],
+  );
 
   return {
     currentScreen: screen,
     showPlansScreen,
     showTicketsScreen,
+    showTicketDetailsScreen,
   };
 }
 
-export type { Screen };
+export type { Screen, ScreenAction };
