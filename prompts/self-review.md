@@ -16,6 +16,9 @@ Repository: `{{ repo }}`
 
 Review the current diff on this branch. Run `git diff main` (or the appropriate base branch) to see all changes.
 
+Note: In worktrees, `git diff main` may show deletions for files that exist on main but aren't in this worktree 
+(e.g., .env.local, *.tfvars). Ignore these — only review changes from this branch's commits. Use `git log main..HEAD--oneline` to identify your commits, then scope your review to those changes only.
+
 Evaluate the diff against this checklist:
 
 1. **Correctness**: Does the code do what the ticket requires? Are there logic errors?
