@@ -3,16 +3,16 @@ import type React from "react";
 import { useState } from "react";
 import type { TicketState } from "../../core/types.js";
 import {
-  type DetailLine,
-  DetailRow,
   LABEL_WIDTH,
-} from "../components/DetailRow.js";
+  type TicketDetailLine,
+  TicketDetailRow,
+} from "../components/TicketDetailRow.js";
 
 export function buildDetailLines(
   ticket: TicketState,
   width: number,
-): DetailLine[] {
-  const lines: DetailLine[] = [];
+): TicketDetailLine[] {
+  const lines: TicketDetailLine[] = [];
   const descWidth = Math.max(1, width - LABEL_WIDTH);
 
   // 1. Title
@@ -178,7 +178,7 @@ export function TicketDetailsScreen({
     <Box flexDirection="column">
       {visibleLines.map((line, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: lines have no stable identity; order is fixed
-        <DetailRow key={i} line={line} />
+        <TicketDetailRow key={i} line={line} />
       ))}
       {hasOverflow && (
         <Text dimColor>

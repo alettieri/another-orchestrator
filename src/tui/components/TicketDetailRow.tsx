@@ -7,16 +7,18 @@ import { StatusBadge } from "./StatusBadge.js";
 
 export const LABEL_WIDTH = 10;
 
-export type DetailLine =
+export type TicketDetailLine =
   | { type: "text"; text: string; dim?: boolean }
   | { type: "status-phase"; status: TicketStatus; phase: string }
   | { type: "heading"; text: string };
 
-interface DetailRowProps {
-  line: DetailLine;
+interface TicketDetailRowProps {
+  line: TicketDetailLine;
 }
 
-export function DetailRow({ line }: DetailRowProps): React.ReactElement {
+export function TicketDetailRow({
+  line,
+}: TicketDetailRowProps): React.ReactElement {
   if (line.type === "heading") {
     const rule = "─".repeat(line.text.length);
     return (
