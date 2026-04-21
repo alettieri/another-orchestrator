@@ -12,6 +12,10 @@ import { StatusBadge } from "../components/StatusBadge.js";
 import { type Column, Table } from "../components/Table.js";
 import { PHASE_COLORS, PHASE_LABELS } from "../constants/phase.js";
 import type { PhaseId } from "../types/phase.js";
+import {
+  computeSkipUpdate,
+  getLatestSessionId,
+} from "./TicketsScreen.helpers.js";
 
 interface TicketsScreenProps {
   plan: PlanFile;
@@ -62,31 +66,10 @@ function getRetryCount(ticket: TicketState): number {
   return Object.values(ticket.retries).reduce<number>((sum, n) => sum + n, 0);
 }
 
-export function getLatestSessionId(ticket: TicketState): string | null {
-  if (ticket.status === "running" && ticket.currentSessionId) {
-    return ticket.currentSessionId;
-  }
-  const entry = [...ticket.phaseHistory]
-    .reverse()
-    .find((e) => e.sessionId !== undefined);
-  return entry?.sessionId ?? null;
-}
-
 function getBlockedBy(plan: PlanFile, ticketId: string): string {
   const entry = plan.tickets.find((t) => t.ticketId === ticketId);
   if (!entry || entry.blockedBy.length === 0) return "—";
   return entry.blockedBy.join(", ");
-}
-
-export function computeSkipUpdate(
-  ticket: TicketState,
-  workflows: Map<string, WorkflowDefinition>,
-): Pick<TicketState, "currentPhase" | "status"> | null {
-  const workflow = workflows.get(ticket.workflow);
-  if (!workflow) return null;
-  const phase = workflow.phases.find((p) => p.id === ticket.currentPhase);
-  if (!phase?.onSuccess) return null;
-  return { currentPhase: phase.onSuccess, status: "ready" };
 }
 
 const COLUMNS: Column[] = [

@@ -12,8 +12,8 @@ import { queryClient } from "../queries/query-client.js";
 import {
   computeSkipUpdate,
   getLatestSessionId,
-  TicketsScreen,
-} from "./TicketsScreen.js";
+} from "./TicketsScreen.helpers.js";
+import { TicketsScreen } from "./TicketsScreen.js";
 
 function makePlan(overrides: Partial<PlanFile> = {}): PlanFile {
   return {

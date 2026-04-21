@@ -5,8 +5,8 @@ import type { TicketState } from "../../core/types.js";
 import {
   buildDetailLines,
   clampScrollOffset,
-  TicketDetailsScreen,
-} from "./TicketDetailsScreen.js";
+} from "./TicketDetailsScreen.helpers.js";
+import { TicketDetailsScreen } from "./TicketDetailsScreen.js";
 
 function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
   return {
