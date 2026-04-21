@@ -181,7 +181,10 @@ export function TicketDetailsScreen({
 
   return (
     <Box flexDirection="column">
-      {visibleLines.map((line, i) => renderDetailLine(line, i))}
+      {visibleLines.map((line, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: lines have no stable identity; order is fixed
+        <DetailRow key={i} line={line} />
+      ))}
       {hasOverflow && (
         <Text dimColor>
           {`↑↓ ${scrollOffset + effectiveViewport}/${totalLines}`.padStart(
@@ -193,11 +196,11 @@ export function TicketDetailsScreen({
   );
 }
 
-function renderDetailLine(line: DetailLine, key: number): React.ReactElement {
+function DetailRow({ line }: { line: DetailLine }): React.ReactElement {
   if (line.type === "heading") {
     const rule = "─".repeat(line.text.length);
     return (
-      <Box key={key} flexDirection="column">
+      <Box flexDirection="column">
         <Text bold>{line.text}</Text>
         <Text dimColor>{rule}</Text>
       </Box>
@@ -209,7 +212,7 @@ function renderDetailLine(line: DetailLine, key: number): React.ReactElement {
     const label = PHASE_LABELS[phaseId] ?? line.phase;
     const color = PHASE_COLORS[phaseId];
     return (
-      <Box key={key} flexDirection="row">
+      <Box flexDirection="row">
         <Text>{"Status:".padEnd(LABEL_WIDTH)}</Text>
         <StatusBadge status={line.status} />
         <Text>{"  Phase:   "}</Text>
@@ -218,9 +221,5 @@ function renderDetailLine(line: DetailLine, key: number): React.ReactElement {
     );
   }
 
-  return (
-    <Text key={key} dimColor={line.dim}>
-      {line.text}
-    </Text>
-  );
+  return <Text dimColor={line.dim}>{line.text}</Text>;
 }
