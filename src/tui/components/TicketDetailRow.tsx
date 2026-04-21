@@ -1,16 +1,12 @@
 import { Box, Text } from "ink";
 import type React from "react";
-import type { TicketStatus } from "../../core/types.js";
 import { PHASE_COLORS, PHASE_LABELS } from "../constants/phase.js";
 import type { PhaseId } from "../types/phase.js";
 import { StatusBadge } from "./StatusBadge.js";
-
-export const LABEL_WIDTH = 10;
-
-export type TicketDetailLine =
-  | { type: "text"; text: string; dim?: boolean }
-  | { type: "status-phase"; status: TicketStatus; phase: string }
-  | { type: "heading"; text: string };
+import {
+  LABEL_WIDTH,
+  type TicketDetailLine,
+} from "./TicketDetailRow.helpers.js";
 
 interface TicketDetailRowProps {
   line: TicketDetailLine;
