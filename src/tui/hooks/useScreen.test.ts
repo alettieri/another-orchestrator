@@ -102,4 +102,64 @@ describe("screenReducer", () => {
     screen = screenReducer(screen, { type: "SHOW_PLANS" });
     expect(screen).toEqual({ type: "plans" });
   });
+
+  it("full drill-in sequence: plans → tickets → ticket-logs", () => {
+    let screen: Screen = { type: "plans" };
+    screen = screenReducer(screen, { type: "SHOW_TICKETS", planId: "plan-1" });
+    screen = screenReducer(screen, {
+      type: "SHOW_TICKET_LOGS",
+      planId: "plan-1",
+      ticketId: "ticket-1",
+    });
+    expect(screen).toEqual({
+      type: "ticket-logs",
+      planId: "plan-1",
+      ticketId: "ticket-1",
+    });
+  });
+
+  it("transitions ticket-logs → tickets (esc back one level)", () => {
+    const initial: Screen = {
+      type: "ticket-logs",
+      planId: "plan-1",
+      ticketId: "ticket-1",
+    };
+    const next = screenReducer(initial, {
+      type: "SHOW_TICKETS",
+      planId: "plan-1",
+    });
+    expect(next).toEqual({ type: "tickets", planId: "plan-1" });
+  });
+
+  it("dispatches directly to ticket-logs from plans", () => {
+    const initial: Screen = { type: "plans" };
+    const next = screenReducer(initial, {
+      type: "SHOW_TICKET_LOGS",
+      planId: "plan-2",
+      ticketId: "ticket-5",
+    });
+    expect(next).toEqual({
+      type: "ticket-logs",
+      planId: "plan-2",
+      ticketId: "ticket-5",
+    });
+  });
+
+  it("dispatches directly to ticket-logs from ticket-details", () => {
+    const initial: Screen = {
+      type: "ticket-details",
+      planId: "plan-1",
+      ticketId: "ticket-1",
+    };
+    const next = screenReducer(initial, {
+      type: "SHOW_TICKET_LOGS",
+      planId: "plan-1",
+      ticketId: "ticket-1",
+    });
+    expect(next).toEqual({
+      type: "ticket-logs",
+      planId: "plan-1",
+      ticketId: "ticket-1",
+    });
+  });
 });
