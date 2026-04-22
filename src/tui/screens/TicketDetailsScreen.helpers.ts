@@ -84,7 +84,7 @@ export function buildDetailLines(
   return lines;
 }
 
-function wrapText(text: string, maxWidth: number): string[] {
+export function wrapText(text: string, maxWidth: number): string[] {
   if (maxWidth <= 0) return [text];
   const words = text.split(/\s+/);
   const lines: string[] = [];

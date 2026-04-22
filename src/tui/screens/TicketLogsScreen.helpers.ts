@@ -1,4 +1,5 @@
 import os from "node:os";
+import { wrapText } from "./TicketDetailsScreen.helpers.js";
 
 export type LogEvent =
   | { type: "phase-divider"; phase: string; sessionId: string }
@@ -84,27 +85,6 @@ export function inlineInput(input: unknown, maxLen: number): string {
     return `${result.slice(0, Math.max(0, maxLen - 1))}…`;
   }
   return result;
-}
-
-function wrapText(text: string, maxWidth: number): string[] {
-  if (maxWidth <= 0) return [text];
-  const words = text.split(/\s+/);
-  const lines: string[] = [];
-  let current = "";
-
-  for (const word of words) {
-    if (!word) continue;
-    if (current === "") {
-      current = word;
-    } else if (current.length + 1 + word.length <= maxWidth) {
-      current += ` ${word}`;
-    } else {
-      lines.push(current);
-      current = word;
-    }
-  }
-  if (current) lines.push(current);
-  return lines.length > 0 ? lines : [""];
 }
 
 export function buildLogLines(events: LogEvent[], width: number): LogLine[] {
