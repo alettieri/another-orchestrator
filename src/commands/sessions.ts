@@ -23,13 +23,6 @@ export interface TicketSessionEntry {
   sessionId: string;
 }
 
-function toSessionReference(entry: PhaseHistorySession): SessionReference {
-  return {
-    provider: entry.session?.provider ?? "claude",
-    sessionId: entry.sessionId,
-  };
-}
-
 function toTicketSessionEntry(entry: PhaseHistorySession): TicketSessionEntry {
   return {
     phase: entry.phase,
@@ -215,7 +208,11 @@ export function register(
         }
 
         const cwd = ticket.worktree || process.cwd();
-        const sessionRef = resolveSessionReference(ticket, sessionId, opts.phase);
+        const sessionRef = resolveSessionReference(
+          ticket,
+          sessionId,
+          opts.phase,
+        );
         const command = getResumeCommand(sessionRef);
         const args = buildResumeArgs(sessionRef);
 
