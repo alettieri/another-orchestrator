@@ -78,7 +78,10 @@ export function TicketLogsScreen({
 
   return (
     <Box flexDirection="column">
-      {visibleLines.map((line, i) => renderLine(line, i))}
+      {visibleLines.map((line, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: log lines are append-only; position is stable identity
+        <LogLineRow key={i} line={line} />
+      ))}
       {hasOverflow && (
         <Text dimColor>
           {`↑↓ ${scrollOffset + effectiveViewport}/${totalLines}`.padStart(
@@ -90,25 +93,24 @@ export function TicketLogsScreen({
   );
 }
 
-function renderLine(line: LogLine, key: number): React.ReactElement {
+function LogLineRow({ line }: { line: LogLine }): React.ReactElement {
   if (line.type === "divider") {
     return (
       <Text
-        key={key}
         dimColor
       >{`─── ${line.phase}  ${line.sessionId.slice(0, 8)} ───`}</Text>
     );
   }
   if (line.type === "text") {
-    return <Text key={key}>{line.text}</Text>;
+    return <Text>{line.text}</Text>;
   }
   if (line.type === "tool") {
     return (
-      <Box key={key}>
+      <Box>
         <Text color="cyan">{`▸ ${line.name}`}</Text>
         <Text dimColor>{` ${line.summary}`}</Text>
       </Box>
     );
   }
-  return <Text key={key}> </Text>;
+  return <Text> </Text>;
 }
