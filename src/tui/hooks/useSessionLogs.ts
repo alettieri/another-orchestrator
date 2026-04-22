@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { watch } from "chokidar";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import type { PhaseHistoryEntry, TicketState } from "../../core/types.js";
 import {
   type LogEvent,
@@ -10,100 +11,75 @@ import {
 
 type PhaseWithSession = PhaseHistoryEntry & { sessionId: string };
 
-export function useSessionLogs(ticket: TicketState): LogEvent[] {
-  const [sessionEvents, setSessionEvents] = useState<Map<string, LogEvent[]>>(
-    new Map(),
-  );
+function sessionLogKey(worktree: string, sessionId: string) {
+  return ["session-log", worktree, sessionId] as const;
+}
 
-  const phaseHistory = ticket.phaseHistory;
+export function useSessionLogs(ticket: TicketState): LogEvent[] {
+  const queryClient = useQueryClient();
   const worktree = ticket.worktree;
 
+  const phasesWithSession = useMemo(
+    () =>
+      ticket.phaseHistory.filter(
+        (e): e is PhaseWithSession => e.sessionId != null,
+      ),
+    [ticket.phaseHistory],
+  );
+
+  const results = useQueries({
+    queries: phasesWithSession.map((entry) => ({
+      queryKey: sessionLogKey(worktree, entry.sessionId),
+      queryFn: async () => {
+        const path = resolveSessionPath(worktree, entry.sessionId);
+        try {
+          const content = await readFile(path, "utf-8");
+          return parseSessionJsonl(content);
+        } catch {
+          return [] as LogEvent[];
+        }
+      },
+    })),
+  });
+
   useEffect(() => {
-    const phasesWithSession = phaseHistory.filter(
-      (e): e is PhaseWithSession => e.sessionId != null,
-    );
+    if (phasesWithSession.length === 0) return;
 
     const paths = phasesWithSession.map((e) =>
       resolveSessionPath(worktree, e.sessionId),
     );
 
-    let cancelled = false;
-
-    async function loadAll() {
-      const results = await Promise.all(
-        paths.map(async (path, idx) => {
-          const entry = phasesWithSession[idx];
-          try {
-            const content = await readFile(path, "utf-8");
-            return {
-              sessionId: entry.sessionId,
-              events: parseSessionJsonl(content),
-            };
-          } catch {
-            return { sessionId: entry.sessionId, events: [] as LogEvent[] };
-          }
-        }),
-      );
-
-      if (cancelled) return;
-
-      setSessionEvents(new Map(results.map((r) => [r.sessionId, r.events])));
-    }
-
-    loadAll();
-
-    if (paths.length === 0) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
     const watcher = watch(paths, { ignoreInitial: true });
 
-    const handleFile = async (filePath: string) => {
+    const invalidate = (filePath: string) => {
       const idx = paths.indexOf(filePath);
-      if (idx === -1) return;
-      const entry = phasesWithSession[idx];
-      try {
-        const content = await readFile(filePath, "utf-8");
-        const events = parseSessionJsonl(content);
-        if (!cancelled) {
-          setSessionEvents((prev) => {
-            const next = new Map(prev);
-            next.set(entry.sessionId, events);
-            return next;
-          });
-        }
-      } catch {
-        // file removed or unreadable — skip
+      if (idx !== -1) {
+        void queryClient.invalidateQueries({
+          queryKey: sessionLogKey(worktree, phasesWithSession[idx].sessionId),
+        });
       }
     };
 
-    watcher.on("add", handleFile);
-    watcher.on("change", handleFile);
+    watcher.on("add", invalidate);
+    watcher.on("change", invalidate);
 
     return () => {
-      cancelled = true;
       watcher.close();
     };
-  }, [phaseHistory, worktree]);
+  }, [phasesWithSession, worktree, queryClient]);
 
   return useMemo(() => {
-    const phasesWithSession = phaseHistory.filter(
-      (e): e is PhaseWithSession => e.sessionId != null,
-    );
-
     const allEvents: LogEvent[] = [];
-    for (const entry of phasesWithSession) {
+    for (let i = 0; i < phasesWithSession.length; i++) {
+      const entry = phasesWithSession[i];
       allEvents.push({
         type: "phase-divider",
         phase: entry.phase,
         sessionId: entry.sessionId,
       });
-      const events = sessionEvents.get(entry.sessionId) ?? [];
+      const events = results[i]?.data ?? [];
       allEvents.push(...events);
     }
-
     return allEvents;
-  }, [phaseHistory, sessionEvents]);
+  }, [phasesWithSession, results]);
 }

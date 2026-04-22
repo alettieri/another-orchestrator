@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Text } from "ink";
 import { render } from "ink-testing-library";
 import type React from "react";
@@ -64,8 +65,29 @@ function makePhaseEntry(
 
 // ─── Test wrapper ─────────────────────────────────────────────────────────────
 
+function makeQueryClient() {
+  return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+}
+
 // biome-ignore lint/style/useComponentExportOnlyModules: test-only wrapper
 function HookWrapper({
+  ticket,
+  onEvents,
+  queryClient,
+}: {
+  ticket: TicketState;
+  onEvents: (events: LogEvent[], count: number) => void;
+  queryClient: QueryClient;
+}): React.ReactElement {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <HookWrapperInner ticket={ticket} onEvents={onEvents} />
+    </QueryClientProvider>
+  );
+}
+
+// biome-ignore lint/style/useComponentExportOnlyModules: test-only wrapper
+function HookWrapperInner({
   ticket,
   onEvents,
 }: {
@@ -105,9 +127,11 @@ describe("useSessionLogs", () => {
     });
 
     const captured: LogEvent[][] = [];
+    const qc = makeQueryClient();
     const { unmount } = render(
       <HookWrapper
         ticket={ticket}
+        queryClient={qc}
         onEvents={(evts) => captured.push([...evts])}
       />,
     );
@@ -131,9 +155,11 @@ describe("useSessionLogs", () => {
     });
 
     const captured: number[] = [];
+    const qc = makeQueryClient();
     const { unmount } = render(
       <HookWrapper
         ticket={ticket}
+        queryClient={qc}
         onEvents={(_, count) => captured.push(count)}
       />,
     );
@@ -155,9 +181,11 @@ describe("useSessionLogs", () => {
     });
 
     const captured: LogEvent[][] = [];
+    const qc = makeQueryClient();
     const { unmount } = render(
       <HookWrapper
         ticket={ticket}
+        queryClient={qc}
         onEvents={(evts) => captured.push([...evts])}
       />,
     );
@@ -180,8 +208,9 @@ describe("useSessionLogs", () => {
       ],
     });
 
+    const qc = makeQueryClient();
     const { unmount } = render(
-      <HookWrapper ticket={ticket} onEvents={() => {}} />,
+      <HookWrapper ticket={ticket} queryClient={qc} onEvents={() => {}} />,
     );
 
     expect(mockChokidarWatch).toHaveBeenCalled();
@@ -195,9 +224,11 @@ describe("useSessionLogs", () => {
     });
 
     const captured: number[] = [];
+    const qc = makeQueryClient();
     const { unmount } = render(
       <HookWrapper
         ticket={ticket}
+        queryClient={qc}
         onEvents={(_, count) => captured.push(count)}
       />,
     );
@@ -221,9 +252,11 @@ describe("useSessionLogs", () => {
     });
 
     const captured: LogEvent[][] = [];
+    const qc = makeQueryClient();
     const { unmount } = render(
       <HookWrapper
         ticket={ticket}
+        queryClient={qc}
         onEvents={(evts) => captured.push([...evts])}
       />,
     );
