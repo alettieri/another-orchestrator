@@ -1,5 +1,4 @@
 import { render } from "ink-testing-library";
-import type React from "react";
 import { describe, expect, it } from "vitest";
 import type { TicketState } from "../../core/types.js";
 import {
@@ -24,6 +23,7 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     status: "running",
     currentPhase: "implement",
     currentSessionId: null,
+    currentSession: null,
     phaseHistory: [],
     context: {},
     retries: {},

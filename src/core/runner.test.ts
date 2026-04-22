@@ -75,6 +75,7 @@ phases:
       status: "ready",
       currentPhase: "run_script",
       currentSessionId: null,
+      currentSession: null,
       phaseHistory: [],
       context: {},
       retries: {},
@@ -233,6 +234,89 @@ phases:
     const result = await runner.runSingleTicket("test-plan", "TICKET-1");
 
     expect(result.context.script_output).toContain("captured_data");
+  });
+
+  it("persists live and completed agent session metadata generically", async () => {
+    const binDir = join(tmpDir, "bin");
+    await mkdir(binDir, { recursive: true });
+    const codexPath = join(binDir, "codex");
+    await writeFile(
+      codexPath,
+      `#!/usr/bin/env bash
+printf '%s\n' '{"type":"thread.created","thread_id":"thread-runner-1"}'
+sleep 0.2
+printf '%s\n' '{"type":"response.completed","response":{"output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"runner codex output"}]}]}}'
+`,
+      { mode: 0o755 },
+    );
+
+    await writeFile(join(promptDir, "agent.md"), "Implement {{ ticketId }}");
+    await writeFile(
+      join(workflowDir, "agent.yaml"),
+      `
+name: agent
+description: "Agent workflow"
+phases:
+  - id: implement
+    type: agent
+    promptTemplate: agent.md
+    agent: codex
+    onSuccess: complete
+    onFailure: abort
+  - id: complete
+    type: terminal
+  - id: abort
+    type: terminal
+    notify: true
+`,
+    );
+
+    config.agents.codex = { command: codexPath, defaultArgs: [] };
+
+    await savePlan(makePlan({ workflow: "agent" }));
+    await saveTicket(
+      makeTicket({
+        workflow: "agent",
+        currentPhase: "implement",
+        status: "ready",
+      }),
+    );
+
+    const runner = createRunner(config);
+    await runner.tick();
+
+    await vi.waitFor(async () => {
+      const live = await readTicket("test-plan", "TICKET-1");
+      expect(live.status).toBe("running");
+      expect(live.currentSessionId).toBe("thread-runner-1");
+      expect(live.currentSession).toEqual({
+        agent: "codex",
+        provider: "codex",
+        sessionId: null,
+        threadId: "thread-runner-1",
+      });
+    });
+
+    await vi.waitFor(async () => {
+      const completed = await readTicket("test-plan", "TICKET-1");
+      expect(completed.status).toBe("complete");
+      expect(completed.currentSessionId).toBeNull();
+      expect(completed.currentSession).toBeNull();
+      expect(completed.phaseHistory[0]).toMatchObject({
+        phase: "implement",
+        status: "success",
+        sessionId: "thread-runner-1",
+        session: {
+          agent: "codex",
+          provider: "codex",
+          sessionId: null,
+          threadId: "thread-runner-1",
+        },
+      });
+      expect(completed.phaseHistory[0]?.output).toContain(
+        "runner codex output",
+      );
+    });
   });
 
   it("throws for missing ticket", async () => {

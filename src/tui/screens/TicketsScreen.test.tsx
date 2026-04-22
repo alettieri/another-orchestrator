@@ -9,9 +9,10 @@ import type {
   WorkflowDefinition,
 } from "../../core/types.js";
 import { queryClient } from "../queries/query-client.js";
+import { buildResumeCommand } from "../session.js";
 import {
   computeSkipUpdate,
-  getLatestSessionId,
+  getLatestSession,
 } from "./TicketsScreen.helpers.js";
 import { TicketsScreen } from "./TicketsScreen.js";
 
@@ -50,6 +51,7 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     status: "running",
     currentPhase: "implement",
     currentSessionId: null,
+    currentSession: null,
     phaseHistory: [
       {
         phase: "implement",
@@ -444,10 +446,10 @@ describe("TicketsScreen", () => {
   });
 });
 
-describe("getLatestSessionId", () => {
+describe("getLatestSession", () => {
   it("returns null when phaseHistory is empty", () => {
     const ticket = makeTicket({ phaseHistory: [] });
-    expect(getLatestSessionId(ticket)).toBeNull();
+    expect(getLatestSession(ticket)).toBeNull();
   });
 
   it("returns null when no entry has a sessionId", () => {
@@ -461,10 +463,10 @@ describe("getLatestSessionId", () => {
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBeNull();
+    expect(getLatestSession(ticket)).toBeNull();
   });
 
-  it("returns the sessionId from the last entry that has one", () => {
+  it("returns the latest history session with provider metadata", () => {
     const ticket = makeTicket({
       phaseHistory: [
         {
@@ -480,13 +482,22 @@ describe("getLatestSessionId", () => {
           startedAt: new Date().toISOString(),
           completedAt: null,
           sessionId: "last",
+          session: {
+            agent: "codex",
+            provider: "codex",
+            sessionId: null,
+            threadId: "last",
+          },
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBe("last");
+    expect(getLatestSession(ticket)).toEqual({
+      provider: "codex",
+      sessionId: "last",
+    });
   });
 
-  it("skips entries without sessionId when finding the latest", () => {
+  it("defaults legacy history sessions to claude", () => {
     const ticket = makeTicket({
       phaseHistory: [
         {
@@ -504,13 +515,22 @@ describe("getLatestSessionId", () => {
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBe("only");
+    expect(getLatestSession(ticket)).toEqual({
+      provider: "claude",
+      sessionId: "only",
+    });
   });
 
-  it("prefers currentSessionId over phaseHistory when ticket is running", () => {
+  it("prefers current session metadata over phaseHistory when ticket is running", () => {
     const ticket = makeTicket({
       status: "running",
       currentSessionId: "live-session",
+      currentSession: {
+        agent: "codex",
+        provider: "codex",
+        sessionId: null,
+        threadId: "live-session",
+      },
       phaseHistory: [
         {
           phase: "implement",
@@ -521,7 +541,10 @@ describe("getLatestSessionId", () => {
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBe("live-session");
+    expect(getLatestSession(ticket)).toEqual({
+      provider: "codex",
+      sessionId: "live-session",
+    });
   });
 
   it("falls back to phaseHistory when ticket is not running", () => {
@@ -538,7 +561,10 @@ describe("getLatestSessionId", () => {
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBe("history-session");
+    expect(getLatestSession(ticket)).toEqual({
+      provider: "claude",
+      sessionId: "history-session",
+    });
   });
 
   it("falls back to phaseHistory when running but no currentSessionId is set", () => {
@@ -555,7 +581,24 @@ describe("getLatestSessionId", () => {
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBe("history-session");
+    expect(getLatestSession(ticket)).toEqual({
+      provider: "claude",
+      sessionId: "history-session",
+    });
+  });
+});
+
+describe("buildResumeCommand", () => {
+  it("builds a Claude resume command", () => {
+    expect(
+      buildResumeCommand({ provider: "claude", sessionId: "session-123" }),
+    ).toBe("claude --resume session-123");
+  });
+
+  it("builds a Codex resume command", () => {
+    expect(
+      buildResumeCommand({ provider: "codex", sessionId: "thread-123" }),
+    ).toBe("codex resume thread-123");
   });
 });
 

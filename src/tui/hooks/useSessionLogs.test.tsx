@@ -15,9 +15,17 @@ vi.mock("chokidar", () => {
   return { watch: vi.fn(() => mockWatcher) };
 });
 
-vi.mock("node:fs/promises", () => ({
-  readFile: vi.fn(),
-}));
+vi.mock("node:fs/promises", async () => {
+  const actual =
+    await vi.importActual<typeof import("node:fs/promises")>(
+      "node:fs/promises",
+    );
+  return {
+    ...actual,
+    readFile: vi.fn(),
+    readdir: vi.fn(),
+  };
+});
 
 import { readFile } from "node:fs/promises";
 import { watch as chokidarWatch } from "chokidar";
@@ -43,6 +51,7 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     status: "running",
     currentPhase: "implement",
     currentSessionId: null,
+    currentSession: null,
     phaseHistory: [],
     context: {},
     retries: {},

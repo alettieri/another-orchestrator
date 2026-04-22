@@ -1,18 +1,23 @@
-import { execSync } from "node:child_process";
 import { Text, useInput } from "ink";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import {
+  copyResumeCommandToClipboard,
+  type SessionReference,
+} from "../session.js";
 
 interface SessionCopyCellProps {
-  sessionId: string | null;
+  session: SessionReference | null;
   isSelected: boolean;
 }
 
 export function SessionCopyCell({
-  sessionId,
+  session,
   isSelected,
 }: SessionCopyCellProps): React.ReactElement {
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<
+    "idle" | "copied" | "unavailable"
+  >("idle");
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -23,16 +28,21 @@ export function SessionCopyCell({
   );
 
   useInput((input) => {
-    if (!isSelected || input !== "c" || !sessionId) return;
-    execSync("pbcopy", { input: `claude --resume ${sessionId}` });
+    if (!isSelected || input !== "c" || !session) return;
+    const copied = copyResumeCommandToClipboard(session);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    setCopied(true);
-    timeoutRef.current = setTimeout(() => setCopied(false), 1500);
+    setCopyStatus(copied ? "copied" : "unavailable");
+    timeoutRef.current = setTimeout(() => setCopyStatus("idle"), 1500);
   });
 
-  if (copied) return <Text color="green">Copied!</Text>;
-  if (!sessionId) return <Text dimColor>—</Text>;
+  if (copyStatus === "copied") return <Text color="green">Copied!</Text>;
+  if (copyStatus === "unavailable") {
+    return <Text color="red">No clipboard</Text>;
+  }
+  if (!session) return <Text dimColor>—</Text>;
   const display =
-    sessionId.length > 10 ? `${sessionId.slice(0, 10)}…` : sessionId;
+    session.sessionId.length > 10
+      ? `${session.sessionId.slice(0, 10)}…`
+      : session.sessionId;
   return <Text>{display}</Text>;
 }

@@ -7,9 +7,26 @@ import {
   inlineInput,
   type LogEvent,
   parseSessionJsonl,
+  resolveClaudeSessionPath,
+  resolveCodexSessionsRoot,
   resolveSessionPath,
 } from "./TicketLogsScreen.helpers.js";
 import { TicketLogsScreen } from "./TicketLogsScreen.js";
+
+vi.mock("node:fs/promises", async () => {
+  const actual =
+    await vi.importActual<typeof import("node:fs/promises")>(
+      "node:fs/promises",
+    );
+  return {
+    ...actual,
+    readdir: vi.fn(),
+  };
+});
+
+import { readdir } from "node:fs/promises";
+
+const mockReaddir = vi.mocked(readdir);
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -29,6 +46,7 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     status: "running",
     currentPhase: "implement",
     currentSessionId: null,
+    currentSession: null,
     phaseHistory: [],
     context: {},
     retries: {},
@@ -40,26 +58,74 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
 // ─── resolveSessionPath ───────────────────────────────────────────────────────
 
 describe("resolveSessionPath", () => {
-  it("builds path under ~/.claude/projects", () => {
-    const result = resolveSessionPath("/tmp/wt", "abc123");
+  beforeEach(() => {
+    mockReaddir.mockReset();
+  });
+
+  it("builds Claude paths under ~/.claude/projects", async () => {
+    const result = await resolveSessionPath("/tmp/wt", {
+      provider: "claude",
+      sessionId: "abc123",
+    });
     expect(result).toBe(
       `${os.homedir()}/.claude/projects/-tmp-wt/abc123.jsonl`,
     );
   });
 
-  it("expands ~ to os.homedir()", () => {
-    const result = resolveSessionPath("/any/path", "sess");
+  it("exposes the raw Claude path helper", () => {
+    const result = resolveClaudeSessionPath("/any/path", "sess");
     expect(result.startsWith(os.homedir())).toBe(true);
   });
 
   it("converts slashes to dashes in worktree path", () => {
-    const result = resolveSessionPath("/users/foo/bar", "sid");
+    const result = resolveClaudeSessionPath("/users/foo/bar", "sid");
     expect(result).toContain("-users-foo-bar");
   });
 
   it("appends sessionId with .jsonl extension", () => {
-    const result = resolveSessionPath("/tmp", "my-session-id");
+    const result = resolveClaudeSessionPath("/tmp", "my-session-id");
     expect(result.endsWith("/my-session-id.jsonl")).toBe(true);
+  });
+
+  it("finds Codex session files under ~/.codex/sessions", async () => {
+    mockReaddir
+      .mockResolvedValueOnce([
+        {
+          name: "2026",
+          isDirectory: () => true,
+          isFile: () => false,
+        },
+      ] as unknown as Awaited<ReturnType<typeof readdir>>)
+      .mockResolvedValueOnce([
+        {
+          name: "04",
+          isDirectory: () => true,
+          isFile: () => false,
+        },
+      ] as unknown as Awaited<ReturnType<typeof readdir>>)
+      .mockResolvedValueOnce([
+        {
+          name: "22",
+          isDirectory: () => true,
+          isFile: () => false,
+        },
+      ] as unknown as Awaited<ReturnType<typeof readdir>>)
+      .mockResolvedValueOnce([
+        {
+          name: "rollout-2026-04-22T15-27-44-thread-123.jsonl",
+          isDirectory: () => false,
+          isFile: () => true,
+        },
+      ] as unknown as Awaited<ReturnType<typeof readdir>>);
+
+    const result = await resolveSessionPath("/tmp/ignored", {
+      provider: "codex",
+      sessionId: "thread-123",
+    });
+
+    expect(result).toBe(
+      `${resolveCodexSessionsRoot()}/2026/04/22/rollout-2026-04-22T15-27-44-thread-123.jsonl`,
+    );
   });
 });
 
@@ -164,6 +230,36 @@ describe("parseSessionJsonl", () => {
     expect(events).toEqual([
       { type: "assistant-text", text: "first" },
       { type: "tool-use", name: "Write", input: { file_path: "/a.ts" } },
+    ]);
+  });
+
+  it("parses Codex assistant output text", () => {
+    const line = JSON.stringify({
+      type: "response_item",
+      payload: {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "done" }],
+      },
+    });
+
+    expect(parseSessionJsonl(line, "codex")).toEqual([
+      { type: "assistant-text", text: "done" },
+    ]);
+  });
+
+  it("parses Codex function calls as tool-use events", () => {
+    const line = JSON.stringify({
+      type: "response_item",
+      payload: {
+        type: "function_call",
+        name: "exec_command",
+        arguments: JSON.stringify({ cmd: "pwd" }),
+      },
+    });
+
+    expect(parseSessionJsonl(line, "codex")).toEqual([
+      { type: "tool-use", name: "exec_command", input: { cmd: "pwd" } },
     ]);
   });
 });

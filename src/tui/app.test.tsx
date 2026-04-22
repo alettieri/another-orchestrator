@@ -4,6 +4,14 @@ import type { StateManager } from "../core/state.js";
 import type { PlanFile, TicketState } from "../core/types.js";
 import { App } from "./app.js";
 
+vi.mock("chokidar", () => {
+  const mockWatcher = {
+    on: vi.fn().mockReturnThis(),
+    close: vi.fn(),
+  };
+  return { watch: vi.fn(() => mockWatcher) };
+});
+
 function createMockStateManager(
   plans: PlanFile[] = [],
   ticketsByPlan: Map<string, TicketState[]> = new Map(),
@@ -114,6 +122,7 @@ describe("App", () => {
             status: "complete" as const,
             currentPhase: "done",
             currentSessionId: null,
+            currentSession: null,
             phaseHistory: [],
             context: {},
             retries: {},
@@ -134,6 +143,7 @@ describe("App", () => {
             status: "running" as const,
             currentPhase: "implement",
             currentSessionId: null,
+            currentSession: null,
             phaseHistory: [],
             context: {},
             retries: {},
@@ -206,6 +216,7 @@ describe("App", () => {
             status: "running" as const,
             currentPhase: "implement",
             currentSessionId: null,
+            currentSession: null,
             phaseHistory: [],
             context: {},
             retries: {},
@@ -283,6 +294,7 @@ describe("App", () => {
             status: "running" as const,
             currentPhase: "implement",
             currentSessionId: null,
+            currentSession: null,
             phaseHistory: [],
             context: {},
             retries: {},

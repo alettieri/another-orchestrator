@@ -5,18 +5,91 @@ import type { LoadConfigOptions } from "../core/config.js";
 import { loadConfig } from "../core/config.js";
 import { createStateManager } from "../core/state.js";
 import type { PhaseHistoryEntry, TicketState } from "../core/types.js";
+import {
+  buildResumeArgs,
+  getResumeCommand,
+  type SessionReference,
+} from "../tui/session.js";
 
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
-function getClaudeSessions(
+type PhaseHistorySession = PhaseHistoryEntry & { sessionId: string };
+export interface TicketSessionEntry {
+  phase: string;
+  status: "running" | PhaseHistorySession["status"];
+  startedAt: string;
+  completedAt: string | null;
+  provider: string;
+  sessionId: string;
+}
+
+function toSessionReference(entry: PhaseHistorySession): SessionReference {
+  return {
+    provider: entry.session?.provider ?? "claude",
+    sessionId: entry.sessionId,
+  };
+}
+
+function toTicketSessionEntry(entry: PhaseHistorySession): TicketSessionEntry {
+  return {
+    phase: entry.phase,
+    status: entry.status,
+    startedAt: entry.startedAt,
+    completedAt: entry.completedAt,
+    provider: entry.session?.provider ?? "claude",
+    sessionId: entry.sessionId,
+  };
+}
+
+function getCurrentSession(ticket: TicketState): TicketSessionEntry | null {
+  if (!ticket.currentSessionId) return null;
+
+  return {
+    phase: ticket.currentPhase,
+    status: "running",
+    startedAt: new Date(0).toISOString(),
+    completedAt: null,
+    provider: ticket.currentSession?.provider ?? "claude",
+    sessionId: ticket.currentSessionId,
+  };
+}
+
+export function getSessions(
   ticket: TicketState,
   phase?: string,
-): PhaseHistoryEntry[] {
-  let sessions = ticket.phaseHistory.filter((h) => h.sessionId);
+): TicketSessionEntry[] {
+  let sessions = ticket.phaseHistory
+    .filter((h): h is PhaseHistorySession => h.sessionId != null)
+    .map(toTicketSessionEntry);
+  const currentSession = getCurrentSession(ticket);
+  if (
+    currentSession &&
+    !sessions.some((session) => session.sessionId === currentSession.sessionId)
+  ) {
+    sessions = [...sessions, currentSession];
+  }
   if (phase) {
     sessions = sessions.filter((h) => h.phase === phase);
   }
   return sessions;
+}
+
+export function resolveSessionReference(
+  ticket: TicketState,
+  sessionId: string,
+  phase?: string,
+): SessionReference {
+  const knownSession = getSessions(ticket, phase).find(
+    (session) => session.sessionId === sessionId,
+  );
+  if (knownSession) {
+    return {
+      provider: knownSession.provider,
+      sessionId: knownSession.sessionId,
+    };
+  }
+
+  return { provider: "claude", sessionId };
 }
 
 export function register(
@@ -25,7 +98,7 @@ export function register(
 ): void {
   program
     .command("sessions")
-    .description("List Claude sessions for a ticket")
+    .description("List agent sessions for a ticket")
     .argument("<planId>", "Plan ID")
     .argument("<ticketId>", "Ticket ID")
     .option("--phase <phase>", "Filter by phase name")
@@ -46,10 +119,10 @@ export function register(
           return;
         }
 
-        const sessions = getClaudeSessions(ticket, opts.phase);
+        const sessions = getSessions(ticket, opts.phase);
 
         if (sessions.length === 0) {
-          console.log("No Claude sessions found for this ticket.");
+          console.log("No agent sessions found for this ticket.");
           return;
         }
 
@@ -59,6 +132,7 @@ export function register(
             status: s.status,
             startedAt: s.startedAt,
             completedAt: s.completedAt,
+            provider: s.provider,
             sessionId: s.sessionId,
           }));
           console.log(JSON.stringify(output, null, 2));
@@ -70,9 +144,11 @@ export function register(
           const statusColor =
             s.status === "success"
               ? chalk.green(s.status)
-              : chalk.red(s.status);
+              : s.status === "running"
+                ? chalk.yellow(s.status)
+                : chalk.red(s.status);
           console.log(
-            `${i + 1}. ${chalk.cyan(s.phase)} ${statusColor} ${chalk.dim(s.startedAt)} ${chalk.yellow(s.sessionId)}`,
+            `${i + 1}. ${chalk.cyan(s.phase)} ${statusColor} ${chalk.dim(s.startedAt)} ${chalk.magenta(s.provider)} ${chalk.yellow(s.sessionId)}`,
           );
         }
 
@@ -85,7 +161,7 @@ export function register(
 
   program
     .command("resume-session")
-    .description("Resume a Claude session interactively")
+    .description("Resume an agent session interactively")
     .argument("<planId>", "Plan ID")
     .argument("<ticketId>", "Ticket ID")
     .argument("[sessionId]", "Session ID to resume (defaults to most recent)")
@@ -113,7 +189,7 @@ export function register(
         let sessionId = sessionIdArg;
 
         if (!sessionId) {
-          const sessions = getClaudeSessions(ticket, opts.phase);
+          const sessions = getSessions(ticket, opts.phase);
           const latest = sessions[sessions.length - 1];
           sessionId = latest?.sessionId;
         }
@@ -121,7 +197,7 @@ export function register(
         if (!sessionId) {
           console.error(
             chalk.red(
-              "No session ID found. Provide one explicitly or check the ticket has Claude sessions.",
+              "No session ID found. Provide one explicitly or check the ticket has agent sessions.",
             ),
           );
           process.exitCode = 1;
@@ -139,15 +215,19 @@ export function register(
         }
 
         const cwd = ticket.worktree || process.cwd();
+        const sessionRef = resolveSessionReference(ticket, sessionId, opts.phase);
+        const command = getResumeCommand(sessionRef);
+        const args = buildResumeArgs(sessionRef);
 
-        console.log(`Session: ${chalk.yellow(sessionId)}`);
+        console.log(`Session:  ${chalk.yellow(sessionId)}`);
+        console.log(`Provider: ${chalk.magenta(sessionRef.provider)}`);
         console.log(`Ticket:  ${chalk.cyan(ticketId)}`);
         console.log(`CWD:     ${chalk.dim(cwd)}`);
         console.log();
 
         const exitCode = await spawnInteractive({
-          command: "claude",
-          args: ["--resume", sessionId],
+          command,
+          args,
           cwd,
         });
 

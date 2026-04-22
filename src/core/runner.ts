@@ -256,6 +256,7 @@ export function createRunner(
           error: errorMsg,
           phaseHistory: [...ticket.phaseHistory, historyEntry],
           currentSessionId: null,
+          currentSession: null,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -325,6 +326,10 @@ export function createRunner(
     const completedAt = new Date().toISOString();
     const durationMs =
       new Date(completedAt).getTime() - new Date(startedAt).getTime();
+    const clearedSessionState = {
+      currentSessionId: null,
+      currentSession: null,
+    } as const;
     if (result.success) {
       log.success(`Phase "${ticket.currentPhase}" succeeded (${durationMs}ms)`);
     } else {
@@ -332,9 +337,7 @@ export function createRunner(
     }
 
     if (result.sessionId) {
-      log.info(
-        `Phase "${ticket.currentPhase}" Claude session: ${result.sessionId}`,
-      );
+      log.info(`Phase "${ticket.currentPhase}" session: ${result.sessionId}`);
     }
 
     const historyEntry = {
@@ -344,6 +347,7 @@ export function createRunner(
       completedAt,
       output: result.output.slice(0, 4096),
       sessionId: result.sessionId,
+      session: result.session,
     };
 
     // Merge captured values into context
@@ -371,7 +375,7 @@ export function createRunner(
           phaseHistory: [...ticket.phaseHistory, historyEntry],
           context: newContext,
           error: null,
-          currentSessionId: null,
+          ...clearedSessionState,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -392,7 +396,7 @@ export function createRunner(
           context: newContext,
           retries: newRetries,
           error: null,
-          currentSessionId: null,
+          ...clearedSessionState,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -409,7 +413,7 @@ export function createRunner(
           phaseHistory: [...ticket.phaseHistory, historyEntry],
           context: newContext,
           error: null,
-          currentSessionId: null,
+          ...clearedSessionState,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -424,7 +428,7 @@ export function createRunner(
         phaseHistory: [...ticket.phaseHistory, historyEntry],
         context: newContext,
         error: result.success ? null : "Phase failed without a next phase",
-        currentSessionId: null,
+        ...clearedSessionState,
       },
     );
     return { ticket: updated, pendingPoll: false };

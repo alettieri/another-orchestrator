@@ -99,6 +99,15 @@ export const TicketStatusSchema = z.enum([
 
 export type TicketStatus = z.infer<typeof TicketStatusSchema>;
 
+export const AgentSessionSchema = z.object({
+  agent: z.string(),
+  provider: z.string(),
+  sessionId: z.string().nullable().default(null),
+  threadId: z.string().nullable().default(null),
+});
+
+export type AgentSession = z.infer<typeof AgentSessionSchema>;
+
 export const PhaseHistoryEntrySchema = z.object({
   phase: z.string(),
   status: z.enum(["success", "failure", "skipped"]),
@@ -106,6 +115,7 @@ export const PhaseHistoryEntrySchema = z.object({
   completedAt: z.string().nullable(),
   output: z.string().optional(),
   sessionId: z.string().optional(),
+  session: AgentSessionSchema.optional(),
 });
 
 export type PhaseHistoryEntry = z.infer<typeof PhaseHistoryEntrySchema>;
@@ -125,6 +135,7 @@ export const TicketStateSchema = z.object({
   status: TicketStatusSchema,
   currentPhase: z.string(),
   currentSessionId: z.string().nullable().default(null),
+  currentSession: AgentSessionSchema.nullable().default(null),
   phaseHistory: z.array(PhaseHistoryEntrySchema).default([]),
   context: z.record(z.string(), z.string()).default({}),
   retries: z.record(z.string(), z.number()).default({}),

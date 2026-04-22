@@ -5,6 +5,7 @@ import {
   PhaseHistoryEntrySchema,
   PlanFileSchema,
   RawOrchestratorConfigSchema,
+  TicketStateSchema,
   TicketStatusSchema,
   WorkflowDefinitionSchema,
 } from "./types.js";
@@ -223,6 +224,43 @@ describe("PhaseHistoryEntrySchema", () => {
       sessionId: "cc807f8c-1234-5678-abcd-ef0123456789",
     });
     expect(result.sessionId).toBe("cc807f8c-1234-5678-abcd-ef0123456789");
+  });
+
+  it("parses entry with structured session metadata", () => {
+    const result = PhaseHistoryEntrySchema.parse({
+      phase: "implement",
+      status: "success",
+      startedAt: "2025-01-01T00:00:00Z",
+      completedAt: "2025-01-01T00:05:00Z",
+      sessionId: "thread-123",
+      session: {
+        agent: "codex",
+        provider: "codex",
+        sessionId: null,
+        threadId: "thread-123",
+      },
+    });
+    expect(result.session?.threadId).toBe("thread-123");
+  });
+});
+
+describe("TicketStateSchema", () => {
+  it("defaults additive session metadata for legacy tickets", () => {
+    const result = TicketStateSchema.parse({
+      planId: "plan-1",
+      ticketId: "ticket-1",
+      title: "Test Ticket",
+      description: "desc",
+      workflow: "default",
+      branch: "feature/test",
+      worktree: "/tmp/wt",
+      status: "ready",
+      currentPhase: "implement",
+    });
+
+    expect(result.currentSessionId).toBeNull();
+    expect(result.currentSession).toBeNull();
+    expect(result.phaseHistory).toEqual([]);
   });
 });
 

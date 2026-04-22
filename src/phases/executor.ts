@@ -5,6 +5,7 @@ import { resolveAgent } from "../core/config.js";
 import type { StateManager } from "../core/state.js";
 import type { TemplateRenderer } from "../core/template.js";
 import {
+  type AgentSession,
   type OrchestratorConfig,
   type PhaseDefinition,
   PhaseTypeSchema,
@@ -20,6 +21,7 @@ export interface PhaseResult {
   nextPhase: string | null;
   pending?: boolean;
   sessionId?: string;
+  session?: AgentSession;
 }
 
 export interface PhaseExecutor {
@@ -142,6 +144,34 @@ export function createPhaseExecutor(
       planAgent,
     );
     const agentConfig = config.agents[agentName];
+    const toPersistedSession = (session: {
+      provider: string;
+      sessionId: string | null;
+      threadId: string | null;
+    }): AgentSession => ({
+      agent: agentName,
+      provider: session.provider,
+      sessionId: session.sessionId,
+      threadId: session.threadId,
+    });
+    const persistCurrentSession = async (
+      ticketUpdate: Partial<
+        Pick<TicketState, "currentSession" | "currentSessionId">
+      >,
+      fieldName: "currentSession" | "currentSessionId",
+    ) => {
+      if (!stateManager) return;
+      try {
+        await stateManager.updateTicket(
+          ticket.planId,
+          ticket.ticketId,
+          ticketUpdate,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.warn(`Failed to persist ${fieldName}: ${msg}`);
+      }
+    };
 
     log.info(`Invoking agent "${agentName}"`);
 
@@ -157,16 +187,22 @@ export function createPhaseExecutor(
       },
       {
         onOutput: (chunk) => log.trace(chunk),
+        onSession: async (session) => {
+          const persistedSession = toPersistedSession(session);
+          await persistCurrentSession(
+            {
+              currentSession: persistedSession,
+              currentSessionId:
+                persistedSession.sessionId ?? persistedSession.threadId,
+            },
+            "currentSession",
+          );
+        },
         onSessionId: async (sessionId) => {
-          if (!stateManager) return;
-          try {
-            await stateManager.updateTicket(ticket.planId, ticket.ticketId, {
-              currentSessionId: sessionId,
-            });
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            log.warn(`Failed to persist currentSessionId: ${msg}`);
-          }
+          await persistCurrentSession(
+            { currentSessionId: sessionId },
+            "currentSessionId",
+          );
         },
       },
       { signal },
@@ -181,6 +217,9 @@ export function createPhaseExecutor(
       captured,
       nextPhase,
       sessionId: agentResult.sessionId,
+      session: agentResult.session
+        ? toPersistedSession(agentResult.session)
+        : undefined,
     };
   }
 

@@ -81,8 +81,8 @@ All commands accept `-C, --config <path>` to use a specific config file.
 | `orchestrator retry <planId> <ticketId>` | Reset retries and re-run the current phase |
 | `orchestrator pause-plan <planId>` | Pause an entire plan |
 | `orchestrator resume-plan <planId>` | Resume a paused plan |
-| `orchestrator sessions <planId> <ticketId> [--phase <phase>] [--json]` | List Claude sessions for a ticket |
-| `orchestrator resume-session <planId> <ticketId> [sessionId] [--phase <phase>]` | Resume a Claude session interactively |
+| `orchestrator sessions <planId> <ticketId> [--phase <phase>] [--json]` | List agent sessions for a ticket |
+| `orchestrator resume-session <planId> <ticketId> [sessionId] [--phase <phase>]` | Resume an agent session interactively |
 
 ## Architecture
 
@@ -143,12 +143,12 @@ Each invocation is a subprocess in the ticket's git worktree. The agent reads th
 
 ### Session Tracking
 
-When the orchestrator dispatches a Claude agent phase, it captures the session ID from Claude's JSON output. Session IDs are persisted in each ticket's `phaseHistory` entries and logged to both the console and the log file.
+When the orchestrator dispatches an agent phase, it captures provider-specific session metadata from the agent's structured output. Session IDs are persisted in each ticket's `phaseHistory` entries and logged to both the console and the log file.
 
-Users can list all Claude sessions for a ticket and resume any session interactively:
+Users can list all tracked sessions for a ticket and resume any session interactively:
 
 ```sh
-# List all Claude sessions for a ticket
+# List all agent sessions for a ticket
 orchestrator sessions <planId> <ticketId>
 
 # Filter sessions by phase

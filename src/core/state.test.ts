@@ -40,6 +40,7 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     status: "queued",
     currentPhase: "init",
     currentSessionId: null,
+    currentSession: null,
     phaseHistory: [],
     context: {},
     retries: {},
@@ -145,6 +146,36 @@ describe("StateManager", () => {
       await expect(
         sm.updateTicket("plan-1", "nonexistent", { status: "running" }),
       ).rejects.toThrow('Ticket "nonexistent" not found');
+    });
+
+    it("reads legacy tickets without structured session metadata", async () => {
+      const sm = createStateManager(stateDir);
+      await sm.savePlan(makePlan());
+      const ticket = makeTicket();
+      const legacyTicket = {
+        ...ticket,
+        currentSession: undefined,
+        phaseHistory: [
+          {
+            phase: "implement",
+            status: "success",
+            startedAt: "2025-01-01T00:00:00Z",
+            completedAt: "2025-01-01T00:05:00Z",
+            sessionId: "legacy-session",
+          },
+        ],
+      };
+
+      await writeFile(
+        join(stateDir, "plans", "plan-1", "tickets", "t-1.json"),
+        JSON.stringify(legacyTicket, null, 2),
+      );
+
+      const retrieved = await sm.getTicket("plan-1", "t-1");
+      expect(retrieved?.currentSession).toBeNull();
+      expect(retrieved?.currentSessionId).toBeNull();
+      expect(retrieved?.phaseHistory[0]?.sessionId).toBe("legacy-session");
+      expect(retrieved?.phaseHistory[0]?.session).toBeUndefined();
     });
   });
 
