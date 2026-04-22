@@ -42,23 +42,28 @@ export function TicketLogsScreen({
     let next = scrollOffset;
     if (key.upArrow || _input === "k") {
       next = clampScrollOffset(scrollOffset - 1, totalLines, effectiveViewport);
-    } else if (key.downArrow || _input === "j") {
+    }
+    if (key.downArrow || _input === "j") {
       next = clampScrollOffset(scrollOffset + 1, totalLines, effectiveViewport);
-    } else if (key.pageUp) {
+    }
+    if (key.pageUp) {
       next = clampScrollOffset(
         scrollOffset - Math.max(1, effectiveViewport - 1),
         totalLines,
         effectiveViewport,
       );
-    } else if (key.pageDown) {
+    }
+    if (key.pageDown) {
       next = clampScrollOffset(
         scrollOffset + Math.max(1, effectiveViewport - 1),
         totalLines,
         effectiveViewport,
       );
-    } else if (_input === "g") {
+    }
+    if (_input === "g") {
       next = 0;
-    } else if (_input === "G") {
+    }
+    if (_input === "G") {
       next = maxOffset;
     }
 
