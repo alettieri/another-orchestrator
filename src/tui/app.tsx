@@ -15,6 +15,7 @@ import { useWorkflows } from "./hooks/useWorkflows.js";
 import { queryClient } from "./queries/query-client.js";
 import { PlansScreen } from "./screens/PlansScreen.js";
 import { TicketDetailsScreen } from "./screens/TicketDetailsScreen.js";
+import { TicketLogsScreen } from "./screens/TicketLogsScreen.js";
 import { TicketsScreen } from "./screens/TicketsScreen.js";
 
 interface AppProps {
@@ -35,6 +36,7 @@ const PLANS_HOTKEYS: Hotkey[] = [
 const TICKETS_HOTKEYS: Hotkey[] = [
   { key: "↑↓", label: "navigate" },
   { key: "d/⏎", label: "details" },
+  { key: "l", label: "logs" },
   { key: "esc", label: "back" },
   { key: "/", label: "filter" },
   { key: "c", label: "copy resume cmd" },
@@ -45,6 +47,14 @@ const TICKETS_HOTKEYS: Hotkey[] = [
 ];
 
 const TICKET_DETAILS_HOTKEYS: Hotkey[] = [
+  { key: "↑↓", label: "scroll" },
+  { key: "PgUp/PgDn", label: "page" },
+  { key: "g/G", label: "top/bottom" },
+  { key: "esc", label: "back" },
+  { key: "q", label: "quit" },
+];
+
+const TICKET_LOGS_HOTKEYS: Hotkey[] = [
   { key: "↑↓", label: "scroll" },
   { key: "PgUp/PgDn", label: "page" },
   { key: "g/G", label: "top/bottom" },
@@ -81,6 +91,7 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
     showPlansScreen,
     showTicketsScreen,
     showTicketDetailsScreen,
+    showTicketLogsScreen,
   } = useScreen();
 
   const { data: plans = [] } = usePlans(stateManager);
@@ -90,7 +101,9 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
   useStateWatcher(stateDir);
 
   const selectedPlan =
-    currentScreen.type === "tickets" || currentScreen.type === "ticket-details"
+    currentScreen.type === "tickets" ||
+    currentScreen.type === "ticket-details" ||
+    currentScreen.type === "ticket-logs"
       ? plans.find((p) => p.id === currentScreen.planId)
       : undefined;
   const selectedTickets =
@@ -98,7 +111,8 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
       ? (ticketsByPlan.get(currentScreen.planId) ?? [])
       : [];
   const selectedTicket =
-    currentScreen.type === "ticket-details"
+    currentScreen.type === "ticket-details" ||
+    currentScreen.type === "ticket-logs"
       ? (ticketsByPlan.get(currentScreen.planId) ?? []).find(
           (t) => t.ticketId === currentScreen.ticketId,
         )
@@ -117,7 +131,10 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
           exit();
         }
         if (key.escape) {
-          if (currentScreen.type === "ticket-details") {
+          if (
+            currentScreen.type === "ticket-logs" ||
+            currentScreen.type === "ticket-details"
+          ) {
             showTicketsScreen({ planId: currentScreen.planId });
           } else if (currentScreen.type === "tickets") {
             showPlansScreen();
@@ -136,6 +153,9 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
   const terminalWidth = stdout?.columns ?? 80;
 
   const breadcrumbPath = useMemo(() => {
+    if (currentScreen.type === "ticket-logs" && selectedPlan) {
+      return ["Plans", selectedPlan.name, `${currentScreen.ticketId} · logs`];
+    }
     if (currentScreen.type === "ticket-details" && selectedPlan) {
       return ["Plans", selectedPlan.name, currentScreen.ticketId];
     }
@@ -146,18 +166,26 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
   }, [currentScreen, selectedPlan]);
 
   const hotkeys =
-    currentScreen.type === "ticket-details"
-      ? TICKET_DETAILS_HOTKEYS
-      : currentScreen.type === "tickets"
-        ? TICKETS_HOTKEYS
-        : PLANS_HOTKEYS;
+    currentScreen.type === "ticket-logs"
+      ? TICKET_LOGS_HOTKEYS
+      : currentScreen.type === "ticket-details"
+        ? TICKET_DETAILS_HOTKEYS
+        : currentScreen.type === "tickets"
+          ? TICKETS_HOTKEYS
+          : PLANS_HOTKEYS;
 
   return (
     <Box flexDirection="column" height={terminalHeight}>
       <Header planCount={plans.length} runningCount={runningCount} />
       <Breadcrumb path={breadcrumbPath} />
       <Box flexDirection="column" flexGrow={1}>
-        {currentScreen.type === "ticket-details" && selectedTicket ? (
+        {currentScreen.type === "ticket-logs" && selectedTicket ? (
+          <TicketLogsScreen
+            ticket={selectedTicket}
+            height={tableHeight}
+            width={terminalWidth}
+          />
+        ) : currentScreen.type === "ticket-details" && selectedTicket ? (
           <TicketDetailsScreen
             ticket={selectedTicket}
             height={tableHeight}
@@ -171,6 +199,9 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
             stateManager={stateManager}
             onOpenTicket={(ticketId) =>
               showTicketDetailsScreen({ planId: selectedPlan.id, ticketId })
+            }
+            onOpenLogs={(ticketId) =>
+              showTicketLogsScreen({ planId: selectedPlan.id, ticketId })
             }
             height={tableHeight}
           />
