@@ -142,7 +142,7 @@ skills/                       # Agent Skills (progressive disclosure docs)
   providers/
     linear/SKILL.md           # Linear integration
     github-issues/SKILL.md    # GitHub Issues integration
-    filesystem/SKILL.md       # Filesystem issue files (use scripts/jira-to-markdown.sh to import from JIRA)
+    filesystem/SKILL.md       # Filesystem issue files
 
 docs/                         # Reference documentation
   workflows.md                # Workflow authoring reference

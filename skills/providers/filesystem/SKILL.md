@@ -7,8 +7,6 @@ description: Read issue Markdown files from ~/.orchestrator/issues/ and create o
 
 This skill teaches you how to read issue Markdown files from `~/.orchestrator/issues/` and create orchestrator plan and ticket state files from them.
 
-Issues can be created by hand or converted from a JIRA XML export using `scripts/jira-to-markdown.sh`.
-
 ## Overview
 
 Issue files live at `~/.orchestrator/issues/<key>.md`. Each file has YAML frontmatter and structured body sections:

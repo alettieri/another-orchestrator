@@ -381,7 +381,7 @@ The abstraction lives in the **planner layer** via provider-specific Agent Skill
 
 - `skills/providers/linear/SKILL.md` — Teaches the planner how to fetch tickets from Linear via MCP, map Linear fields to ticket state fields, parse dependencies from issue relations, and extract acceptance criteria from ticket descriptions.
 - `skills/providers/github-issues/SKILL.md` — Teaches the planner how to fetch issues via `gh` CLI, map GitHub fields, infer dependencies from issue references, and extract criteria from issue body templates.
-- `skills/providers/filesystem/SKILL.md` — Teaches the planner how to read issue Markdown files from `~/.orchestrator/issues/`, map frontmatter fields to ticket state fields, and resolve dependencies from `## Dependencies` sections. Use `scripts/jira-to-markdown.sh` to convert a JIRA XML export into these files.
+- `skills/providers/filesystem/SKILL.md` — Teaches the planner how to read issue Markdown files from `~/.orchestrator/issues/`, map frontmatter fields to ticket state fields, and resolve dependencies from `## Dependencies` sections.
 
 Adding a new provider requires only writing a new provider skill. No changes to the runner, workflows, or prompts.
 
