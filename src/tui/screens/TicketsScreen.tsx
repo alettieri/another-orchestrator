@@ -23,6 +23,7 @@ interface TicketsScreenProps {
   workflows: Map<string, WorkflowDefinition>;
   stateManager: StateManager;
   onOpenTicket: (ticketId: string) => void;
+  onOpenLogs: (ticketId: string) => void;
   height?: number;
 }
 
@@ -88,6 +89,7 @@ export function TicketsScreen({
   workflows,
   stateManager,
   onOpenTicket,
+  onOpenLogs,
   height,
 }: TicketsScreenProps): React.ReactElement {
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -98,6 +100,11 @@ export function TicketsScreen({
 
     if (key.return || input === "d") {
       onOpenTicket(ticket.ticketId);
+      return;
+    }
+
+    if (input === "l") {
+      onOpenLogs(ticket.ticketId);
       return;
     }
 

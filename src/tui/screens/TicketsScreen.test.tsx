@@ -121,6 +121,7 @@ function renderTicketsScreen(
         workflows={props.workflows ?? new Map()}
         stateManager={props.stateManager ?? makeStateManager()}
         onOpenTicket={props.onOpenTicket ?? (() => {})}
+        onOpenLogs={props.onOpenLogs ?? (() => {})}
         height={props.height}
         plan={props.plan}
         tickets={props.tickets}
@@ -348,6 +349,41 @@ describe("TicketsScreen", () => {
 
     const frame = lastFrame();
     expect(frame).toContain("unknown_phase");
+    unmount();
+  });
+
+  it("calls onOpenLogs with the selected ticket's ticketId when 'l' is pressed", () => {
+    const plan = makePlan();
+    const tickets = [
+      makeTicket({ ticketId: "T-1" }),
+      makeTicket({ ticketId: "T-2" }),
+    ];
+    const onOpenLogs = vi.fn();
+
+    const { stdin, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      onOpenLogs,
+      height: 10,
+    });
+
+    stdin.write("l");
+    expect(onOpenLogs).toHaveBeenCalledWith("T-1");
+    unmount();
+  });
+
+  it("does nothing on 'l' when tickets is empty", () => {
+    const plan = makePlan({ tickets: [] });
+    const onOpenLogs = vi.fn();
+
+    const { stdin, unmount } = renderTicketsScreen({
+      plan,
+      tickets: [],
+      onOpenLogs,
+    });
+
+    stdin.write("l");
+    expect(onOpenLogs).not.toHaveBeenCalled();
     unmount();
   });
 
