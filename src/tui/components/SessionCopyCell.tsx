@@ -2,6 +2,10 @@ import { execSync } from "node:child_process";
 import { Text, useInput } from "ink";
 import type React from "react";
 import { useEffect, useRef, useState } from "react";
+import {
+  formatCompactSessionLabel,
+  getResumeCommand,
+} from "../../core/sessions.js";
 import type { AgentSession } from "../../core/types.js";
 
 interface SessionCopyCellProps {
@@ -24,8 +28,8 @@ export function SessionCopyCell({
   );
 
   useInput((input) => {
-    if (!isSelected || input !== "c" || session?.provider !== "claude") return;
-    execSync("pbcopy", { input: `claude --resume ${session.id}` });
+    if (!isSelected || input !== "c" || !session) return;
+    execSync("pbcopy", { input: getResumeCommand(session) });
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     setCopied(true);
     timeoutRef.current = setTimeout(() => setCopied(false), 1500);
@@ -33,7 +37,5 @@ export function SessionCopyCell({
 
   if (copied) return <Text color="green">Copied!</Text>;
   if (!session) return <Text dimColor>—</Text>;
-  const display =
-    session.id.length > 10 ? `${session.id.slice(0, 10)}…` : session.id;
-  return <Text>{display}</Text>;
+  return <Text>{formatCompactSessionLabel(session)}</Text>;
 }

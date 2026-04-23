@@ -1,3 +1,4 @@
+import { getTicketSession } from "../../core/sessions.js";
 import type {
   AgentSession,
   TicketState,
@@ -5,13 +6,7 @@ import type {
 } from "../../core/types.js";
 
 export function getLatestSession(ticket: TicketState): AgentSession | null {
-  if (ticket.status === "running" && ticket.currentSession) {
-    return ticket.currentSession;
-  }
-  const entry = [...ticket.phaseHistory]
-    .reverse()
-    .find((e) => e.session !== undefined);
-  return entry?.session ?? null;
+  return getTicketSession(ticket)?.session ?? null;
 }
 
 export function computeSkipUpdate(
