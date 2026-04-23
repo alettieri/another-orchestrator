@@ -34,7 +34,21 @@ function makePlan(overrides: Partial<PlanFile> = {}): PlanFile {
   };
 }
 
-function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
+function makeTicket({
+  currentSession = null,
+  phaseHistory = [
+    {
+      phase: "implement",
+      status: "success",
+      startedAt: new Date().toISOString(),
+      completedAt: null,
+    },
+  ],
+  context = {},
+  retries = {},
+  error = null,
+  ...overrides
+}: Partial<TicketState> = {}): TicketState {
   return {
     planId: "plan-1",
     ticketId: "T-1",
@@ -50,18 +64,12 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     status: "running",
     currentPhase: "implement",
     currentSessionId: null,
-    phaseHistory: [
-      {
-        phase: "implement",
-        status: "success",
-        startedAt: new Date().toISOString(),
-        completedAt: null,
-      },
-    ],
-    context: {},
-    retries: {},
-    error: null,
     ...overrides,
+    currentSession,
+    phaseHistory,
+    context,
+    retries,
+    error,
   };
 }
 

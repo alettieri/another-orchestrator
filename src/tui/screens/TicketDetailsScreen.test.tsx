@@ -1,5 +1,4 @@
 import { render } from "ink-testing-library";
-import type React from "react";
 import { describe, expect, it } from "vitest";
 import type { TicketState } from "../../core/types.js";
 import {
@@ -8,7 +7,14 @@ import {
 } from "./TicketDetailsScreen.helpers.js";
 import { TicketDetailsScreen } from "./TicketDetailsScreen.js";
 
-function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
+function makeTicket({
+  currentSession = null,
+  phaseHistory = [],
+  context = {},
+  retries = {},
+  error = null,
+  ...overrides
+}: Partial<TicketState> = {}): TicketState {
   return {
     planId: "plan-1",
     ticketId: "T-1",
@@ -24,11 +30,12 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     status: "running",
     currentPhase: "implement",
     currentSessionId: null,
-    phaseHistory: [],
-    context: {},
-    retries: {},
-    error: null,
     ...overrides,
+    currentSession,
+    phaseHistory,
+    context,
+    retries,
+    error,
   };
 }
 
