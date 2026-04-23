@@ -1,13 +1,17 @@
-import type { TicketState, WorkflowDefinition } from "../../core/types.js";
+import type {
+  AgentSession,
+  TicketState,
+  WorkflowDefinition,
+} from "../../core/types.js";
 
-export function getLatestSessionId(ticket: TicketState): string | null {
-  if (ticket.status === "running" && ticket.currentSessionId) {
-    return ticket.currentSessionId;
+export function getLatestSession(ticket: TicketState): AgentSession | null {
+  if (ticket.status === "running" && ticket.currentSession) {
+    return ticket.currentSession;
   }
   const entry = [...ticket.phaseHistory]
     .reverse()
-    .find((e) => e.sessionId !== undefined);
-  return entry?.sessionId ?? null;
+    .find((e) => e.session !== undefined);
+  return entry?.session ?? null;
 }
 
 export function computeSkipUpdate(

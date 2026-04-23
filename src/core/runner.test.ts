@@ -82,7 +82,6 @@ phases:
       agent: null,
       status: "ready",
       currentPhase: "run_script",
-      currentSessionId: null,
       ...overrides,
       currentSession,
       phaseHistory,
@@ -1136,15 +1135,19 @@ phases:
     const invokeSpy = vi
       .spyOn(invokeModule, "invokeAgent")
       .mockImplementation(async (_agentConfig, _invocation, callbacks) => {
-        await callbacks?.onSessionId?.("legacy-session-id");
-        await callbacks?.onSession?.({ id: "structured-session-id" });
+        await callbacks?.onSession?.({
+          id: "structured-session-id",
+          provider: "claude",
+        });
         return {
           stdout: "agent ok",
           stderr: "",
           exitCode: 0,
           success: true,
-          sessionId: "legacy-session-id",
-          session: { id: "structured-session-id" },
+          session: {
+            id: "structured-session-id",
+            provider: "claude",
+          },
         };
       });
 
@@ -1161,13 +1164,14 @@ phases:
     const result = await runner.runSingleTicket("test-plan", "TICKET-1");
 
     expect(result.status).toBe("complete");
-    expect(result.currentSessionId).toBeNull();
     expect(result.currentSession).toBeNull();
     expect(result.phaseHistory[0]).toMatchObject({
       phase: "agent_phase",
       status: "success",
-      sessionId: "legacy-session-id",
-      session: { id: "structured-session-id" },
+      session: {
+        id: "structured-session-id",
+        provider: "claude",
+      },
     });
 
     invokeSpy.mockRestore();
@@ -1199,8 +1203,10 @@ phases:
     const ticket = makeTicket({
       workflow: "agent-throw-workflow",
       currentPhase: "agent_phase",
-      currentSessionId: "legacy-live-session",
-      currentSession: { id: "structured-live-session" },
+      currentSession: {
+        id: "structured-live-session",
+        provider: "codex",
+      },
     });
     await savePlan(plan);
     await saveTicket(ticket);
@@ -1208,13 +1214,14 @@ phases:
     const result = await runner.runSingleTicket("test-plan", "TICKET-1");
 
     expect(result.status).toBe("failed");
-    expect(result.currentSessionId).toBeNull();
     expect(result.currentSession).toBeNull();
     expect(result.phaseHistory[0]).toMatchObject({
       phase: "agent_phase",
       status: "failure",
-      sessionId: "legacy-live-session",
-      session: { id: "structured-live-session" },
+      session: {
+        id: "structured-live-session",
+        provider: "codex",
+      },
     });
   });
 });

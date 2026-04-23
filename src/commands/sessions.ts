@@ -12,7 +12,9 @@ function getClaudeSessions(
   ticket: TicketState,
   phase?: string,
 ): PhaseHistoryEntry[] {
-  let sessions = ticket.phaseHistory.filter((h) => h.sessionId);
+  let sessions = ticket.phaseHistory.filter(
+    (h) => h.session?.provider === "claude",
+  );
   if (phase) {
     sessions = sessions.filter((h) => h.phase === phase);
   }
@@ -59,7 +61,7 @@ export function register(
             status: s.status,
             startedAt: s.startedAt,
             completedAt: s.completedAt,
-            sessionId: s.sessionId,
+            sessionId: s.session?.id,
           }));
           console.log(JSON.stringify(output, null, 2));
           return;
@@ -72,7 +74,7 @@ export function register(
               ? chalk.green(s.status)
               : chalk.red(s.status);
           console.log(
-            `${i + 1}. ${chalk.cyan(s.phase)} ${statusColor} ${chalk.dim(s.startedAt)} ${chalk.yellow(s.sessionId)}`,
+            `${i + 1}. ${chalk.cyan(s.phase)} ${statusColor} ${chalk.dim(s.startedAt)} ${chalk.yellow(s.session?.id ?? "")}`,
           );
         }
 
@@ -115,7 +117,7 @@ export function register(
         if (!sessionId) {
           const sessions = getClaudeSessions(ticket, opts.phase);
           const latest = sessions[sessions.length - 1];
-          sessionId = latest?.sessionId;
+          sessionId = latest?.session?.id;
         }
 
         if (!sessionId) {

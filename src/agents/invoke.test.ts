@@ -74,9 +74,8 @@ describe("buildAgentArgs", () => {
 
 describe("createClaudeStreamParser", () => {
   it("extracts session_id from the first system/init event and fires callback once", () => {
-    const onSessionId = vi.fn();
     const onSession = vi.fn();
-    const parser = createClaudeStreamParser({ onSessionId, onSession });
+    const parser = createClaudeStreamParser({ onSession });
 
     parser.feed(
       `${JSON.stringify({
@@ -96,11 +95,12 @@ describe("createClaudeStreamParser", () => {
     parser.end();
 
     expect(parser.sessionId).toBe("abc-123");
-    expect(parser.session).toEqual({ id: "abc-123" });
-    expect(onSessionId).toHaveBeenCalledTimes(1);
-    expect(onSessionId).toHaveBeenCalledWith("abc-123");
+    expect(parser.session).toEqual({ id: "abc-123", provider: "claude" });
     expect(onSession).toHaveBeenCalledTimes(1);
-    expect(onSession).toHaveBeenCalledWith({ id: "abc-123" });
+    expect(onSession).toHaveBeenCalledWith({
+      id: "abc-123",
+      provider: "claude",
+    });
   });
 
   it("extracts final text from the result event", () => {
@@ -238,27 +238,23 @@ describe("invokeAgent", () => {
           });
         });
 
-      const onSessionId = vi.fn();
       const onSession = vi.fn();
       const result = await invokeAgent(
         { command: "claude", defaultArgs: [] },
         { prompt: "Say Hello" },
-        { onSessionId, onSession },
+        { onSession },
       );
 
       expect(result.success).toBe(true);
       expect(result.stdout).toBe("Hello");
-      expect(result.sessionId).toBe("bfd2063e-f6d5-4bd4-b169-1d07477dcc9f");
       expect(result.session).toEqual({
         id: "bfd2063e-f6d5-4bd4-b169-1d07477dcc9f",
+        provider: "claude",
       });
-      expect(onSessionId).toHaveBeenCalledTimes(1);
-      expect(onSessionId).toHaveBeenCalledWith(
-        "bfd2063e-f6d5-4bd4-b169-1d07477dcc9f",
-      );
       expect(onSession).toHaveBeenCalledTimes(1);
       expect(onSession).toHaveBeenCalledWith({
         id: "bfd2063e-f6d5-4bd4-b169-1d07477dcc9f",
+        provider: "claude",
       });
     });
 
@@ -289,17 +285,16 @@ describe("invokeAgent", () => {
           });
         });
 
-      const onSessionId = vi.fn();
       const result = await invokeAgent(
         { command: "claude", defaultArgs: [] },
         { prompt: "go" },
-        { onSessionId },
       );
 
       expect(result.stdout).toBe("final text");
-      expect(result.sessionId).toBe("session-xyz");
-      expect(result.session).toEqual({ id: "session-xyz" });
-      expect(onSessionId).toHaveBeenCalledTimes(1);
+      expect(result.session).toEqual({
+        id: "session-xyz",
+        provider: "claude",
+      });
     });
 
     it("falls back to raw stdout when no result event is emitted", async () => {
@@ -315,7 +310,6 @@ describe("invokeAgent", () => {
       );
 
       expect(result.stdout).toBe("");
-      expect(result.sessionId).toBeUndefined();
       expect(result.session).toBeUndefined();
     });
   });

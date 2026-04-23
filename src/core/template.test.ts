@@ -27,7 +27,6 @@ function makeTicket({
     agent: "claude",
     status: "running",
     currentPhase: "run_script",
-    currentSessionId: null,
     ...overrides,
     currentSession,
     phaseHistory,

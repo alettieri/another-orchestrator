@@ -43,7 +43,6 @@ function makeTicket({
     agent: "claude",
     status: "running",
     currentPhase: "run_script",
-    currentSessionId: null,
     ...overrides,
     currentSession,
     phaseHistory,
@@ -377,7 +376,7 @@ describe("executor", () => {
       expect(result.nextPhase).toBe("escalate");
     });
 
-    it("returns structured session data alongside the legacy sessionId", async () => {
+    it("returns structured session data", async () => {
       await writeFile(join(promptDir, "session.md"), "capture session");
 
       const invokeSpy = vi
@@ -387,8 +386,7 @@ describe("executor", () => {
           stderr: "",
           exitCode: 0,
           success: true,
-          sessionId: "legacy-session-id",
-          session: { id: "structured-session-id" },
+          session: { id: "structured-session-id", provider: "claude" },
         } satisfies AgentResult);
 
       const phase: PhaseDefinition = {
@@ -407,8 +405,10 @@ describe("executor", () => {
       const executor = createPhaseExecutor(config, renderer, logger);
       const result = await executor.execute(phase, makeTicket(), null);
 
-      expect(result.sessionId).toBe("legacy-session-id");
-      expect(result.session).toEqual({ id: "structured-session-id" });
+      expect(result.session).toEqual({
+        id: "structured-session-id",
+        provider: "claude",
+      });
 
       invokeSpy.mockRestore();
     });
@@ -420,16 +420,17 @@ describe("executor", () => {
       const invokeSpy = vi
         .spyOn(invokeModule, "invokeAgent")
         .mockImplementation(async (_agentConfig, _invocation, callbacks) => {
-          await callbacks?.onSessionId?.("legacy-session-id");
-          await callbacks?.onSession?.({ id: "structured-session-id" });
+          await callbacks?.onSession?.({
+            id: "structured-session-id",
+            provider: "claude",
+          });
 
           return {
             stdout: "ok",
             stderr: "",
             exitCode: 0,
             success: true,
-            sessionId: "legacy-session-id",
-            session: { id: "structured-session-id" },
+            session: { id: "structured-session-id", provider: "claude" },
           };
         });
 
@@ -463,10 +464,10 @@ describe("executor", () => {
       await executor.execute(phase, makeTicket(), null);
 
       expect(updateTicket).toHaveBeenCalledWith("plan-1", "TICKET-1", {
-        currentSessionId: "legacy-session-id",
-      });
-      expect(updateTicket).toHaveBeenCalledWith("plan-1", "TICKET-1", {
-        currentSession: { id: "structured-session-id" },
+        currentSession: {
+          id: "structured-session-id",
+          provider: "claude",
+        },
       });
 
       invokeSpy.mockRestore();

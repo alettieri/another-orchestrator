@@ -11,7 +11,7 @@ import type {
 import { queryClient } from "../queries/query-client.js";
 import {
   computeSkipUpdate,
-  getLatestSessionId,
+  getLatestSession,
 } from "./TicketsScreen.helpers.js";
 import { TicketsScreen } from "./TicketsScreen.js";
 
@@ -63,7 +63,6 @@ function makeTicket({
     agent: null,
     status: "running",
     currentPhase: "implement",
-    currentSessionId: null,
     ...overrides,
     currentSession,
     phaseHistory,
@@ -290,7 +289,10 @@ describe("TicketsScreen", () => {
             status: "success",
             startedAt: new Date().toISOString(),
             completedAt: null,
-            sessionId: "abc123defghijklmnop",
+            session: {
+              id: "abc123defghijklmnop",
+              provider: "claude",
+            },
           },
         ],
       }),
@@ -329,7 +331,10 @@ describe("TicketsScreen", () => {
             status: "success",
             startedAt: new Date().toISOString(),
             completedAt: null,
-            sessionId: "abc123",
+            session: {
+              id: "abc123",
+              provider: "claude",
+            },
           },
         ],
       }),
@@ -452,13 +457,13 @@ describe("TicketsScreen", () => {
   });
 });
 
-describe("getLatestSessionId", () => {
+describe("getLatestSession", () => {
   it("returns null when phaseHistory is empty", () => {
     const ticket = makeTicket({ phaseHistory: [] });
-    expect(getLatestSessionId(ticket)).toBeNull();
+    expect(getLatestSession(ticket)).toBeNull();
   });
 
-  it("returns null when no entry has a sessionId", () => {
+  it("returns null when no entry has a session", () => {
     const ticket = makeTicket({
       phaseHistory: [
         {
@@ -469,10 +474,10 @@ describe("getLatestSessionId", () => {
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBeNull();
+    expect(getLatestSession(ticket)).toBeNull();
   });
 
-  it("returns the sessionId from the last entry that has one", () => {
+  it("returns the last persisted session", () => {
     const ticket = makeTicket({
       phaseHistory: [
         {
@@ -480,21 +485,24 @@ describe("getLatestSessionId", () => {
           status: "success",
           startedAt: new Date().toISOString(),
           completedAt: null,
-          sessionId: "first",
+          session: { id: "first", provider: "claude" },
         },
         {
           phase: "verify",
           status: "success",
           startedAt: new Date().toISOString(),
           completedAt: null,
-          sessionId: "last",
+          session: { id: "last", provider: "codex" },
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBe("last");
+    expect(getLatestSession(ticket)).toEqual({
+      id: "last",
+      provider: "codex",
+    });
   });
 
-  it("skips entries without sessionId when finding the latest", () => {
+  it("skips entries without session when finding the latest", () => {
     const ticket = makeTicket({
       phaseHistory: [
         {
@@ -502,7 +510,7 @@ describe("getLatestSessionId", () => {
           status: "success",
           startedAt: new Date().toISOString(),
           completedAt: null,
-          sessionId: "only",
+          session: { id: "only", provider: "claude" },
         },
         {
           phase: "verify",
@@ -512,58 +520,68 @@ describe("getLatestSessionId", () => {
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBe("only");
+    expect(getLatestSession(ticket)).toEqual({
+      id: "only",
+      provider: "claude",
+    });
   });
 
-  it("prefers currentSessionId over phaseHistory when ticket is running", () => {
+  it("prefers currentSession over phaseHistory when ticket is running", () => {
     const ticket = makeTicket({
       status: "running",
-      currentSessionId: "live-session",
+      currentSession: { id: "live-session", provider: "claude" },
       phaseHistory: [
         {
           phase: "implement",
           status: "success",
           startedAt: new Date().toISOString(),
           completedAt: null,
-          sessionId: "old-session",
+          session: { id: "old-session", provider: "claude" },
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBe("live-session");
+    expect(getLatestSession(ticket)).toEqual({
+      id: "live-session",
+      provider: "claude",
+    });
   });
 
   it("falls back to phaseHistory when ticket is not running", () => {
     const ticket = makeTicket({
       status: "complete",
-      currentSessionId: null,
       phaseHistory: [
         {
           phase: "implement",
           status: "success",
           startedAt: new Date().toISOString(),
           completedAt: null,
-          sessionId: "history-session",
+          session: { id: "history-session", provider: "claude" },
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBe("history-session");
+    expect(getLatestSession(ticket)).toEqual({
+      id: "history-session",
+      provider: "claude",
+    });
   });
 
-  it("falls back to phaseHistory when running but no currentSessionId is set", () => {
+  it("falls back to phaseHistory when running but no currentSession is set", () => {
     const ticket = makeTicket({
       status: "running",
-      currentSessionId: null,
       phaseHistory: [
         {
           phase: "implement",
           status: "success",
           startedAt: new Date().toISOString(),
           completedAt: null,
-          sessionId: "history-session",
+          session: { id: "history-session", provider: "claude" },
         },
       ],
     });
-    expect(getLatestSessionId(ticket)).toBe("history-session");
+    expect(getLatestSession(ticket)).toEqual({
+      id: "history-session",
+      provider: "claude",
+    });
   });
 });
 
