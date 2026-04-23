@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as invokeModule from "../agents/invoke.js";
 import { createRunner, resolveTicketRepo } from "./runner.js";
 import type { OrchestratorConfig, PlanFile, TicketState } from "./types.js";
 
@@ -1113,5 +1114,107 @@ phases:
     // Missing promptTemplate causes failure, follows onFailure to abort terminal
     expect(result.status).toBe("complete");
     expect(result.currentPhase).toBe("abort");
+  });
+
+  it("records structured session metadata in phase history and clears live session state after agent success", async () => {
+    const agentWorkflowYaml = `
+name: agent-success-workflow
+description: "Agent workflow"
+phases:
+  - id: agent_phase
+    type: agent
+    promptTemplate: agent.md
+    onSuccess: complete
+    onFailure: abort
+  - id: complete
+    type: terminal
+  - id: abort
+    type: terminal
+`;
+    await writeFile(join(workflowDir, "agent-success.yaml"), agentWorkflowYaml);
+    await writeFile(join(promptDir, "agent.md"), "do the thing");
+    const invokeSpy = vi
+      .spyOn(invokeModule, "invokeAgent")
+      .mockImplementation(async (_agentConfig, _invocation, callbacks) => {
+        await callbacks?.onSessionId?.("legacy-session-id");
+        await callbacks?.onSession?.({ id: "structured-session-id" });
+        return {
+          stdout: "agent ok",
+          stderr: "",
+          exitCode: 0,
+          success: true,
+          sessionId: "legacy-session-id",
+          session: { id: "structured-session-id" },
+        };
+      });
+
+    const runner = createRunner(config);
+
+    const plan = makePlan({ workflow: "agent-success-workflow" });
+    const ticket = makeTicket({
+      workflow: "agent-success-workflow",
+      currentPhase: "agent_phase",
+    });
+    await savePlan(plan);
+    await saveTicket(ticket);
+
+    const result = await runner.runSingleTicket("test-plan", "TICKET-1");
+
+    expect(result.status).toBe("complete");
+    expect(result.currentSessionId).toBeNull();
+    expect(result.currentSession).toBeNull();
+    expect(result.phaseHistory[0]).toMatchObject({
+      phase: "agent_phase",
+      status: "success",
+      sessionId: "legacy-session-id",
+      session: { id: "structured-session-id" },
+    });
+
+    invokeSpy.mockRestore();
+  });
+
+  it("records persisted session metadata on thrown phase failure and clears live session state", async () => {
+    const agentWorkflowYaml = `
+name: agent-throw-workflow
+description: "Agent workflow"
+phases:
+  - id: agent_phase
+    type: agent
+    promptTemplate: agent.md
+`;
+    await writeFile(join(workflowDir, "agent-throw.yaml"), agentWorkflowYaml);
+    await writeFile(join(promptDir, "agent.md"), "do the thing");
+
+    const runner = createRunner({
+      ...config,
+      agents: {
+        claude: {
+          command: join(scriptDir, "does-not-exist"),
+          defaultArgs: [],
+        },
+      },
+    });
+
+    const plan = makePlan({ workflow: "agent-throw-workflow" });
+    const ticket = makeTicket({
+      workflow: "agent-throw-workflow",
+      currentPhase: "agent_phase",
+      currentSessionId: "legacy-live-session",
+      currentSession: { id: "structured-live-session" },
+    });
+    await savePlan(plan);
+    await saveTicket(ticket);
+
+    const result = await runner.runSingleTicket("test-plan", "TICKET-1");
+
+    expect(result.status).toBe("failed");
+    expect(result.currentSessionId).toBeNull();
+    expect(result.currentSession).toBeNull();
+    expect(result.phaseHistory[0]).toMatchObject({
+      phase: "agent_phase",
+      status: "failure",
+      sessionId: "legacy-live-session",
+      session: { id: "structured-live-session" },
+    });
   });
 });
