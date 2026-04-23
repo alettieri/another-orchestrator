@@ -303,7 +303,9 @@ describe("TicketsScreen", () => {
       height: 10,
     });
 
-    expect(lastFrame()).toContain("abc123defg…");
+    const frame = lastFrame();
+    expect(frame).toContain("cl:abc123de");
+    expect(frame).toContain("fg…");
     unmount();
   });
 
@@ -345,8 +347,38 @@ describe("TicketsScreen", () => {
       height: 10,
     });
 
-    expect(lastFrame()).toContain("abc123");
+    expect(lastFrame()).toContain("cl:abc123");
     expect(lastFrame()).not.toContain("…");
+    unmount();
+  });
+
+  it("shows the compact provider hint for Codex sessions", () => {
+    const plan = makePlan();
+    const tickets = [
+      makeTicket({
+        phaseHistory: [
+          {
+            phase: "implement",
+            status: "success",
+            startedAt: new Date().toISOString(),
+            completedAt: null,
+            session: {
+              id: "codex123456789",
+              provider: "codex",
+            },
+          },
+        ],
+      }),
+    ];
+    const { lastFrame, unmount } = renderTicketsScreen({
+      plan,
+      tickets,
+      height: 10,
+    });
+
+    const frame = lastFrame();
+    expect(frame).toContain("cx:codex123");
+    expect(frame).toContain("45…");
     unmount();
   });
 

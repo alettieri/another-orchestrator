@@ -2,6 +2,7 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import type { LoadConfigOptions } from "../core/config.js";
 import { loadConfig } from "../core/config.js";
+import { getTicketSession } from "../core/sessions.js";
 import { createStateManager } from "../core/state.js";
 import type { TicketState, WorkflowDefinition } from "../core/types.js";
 import { createWorkflowLoader } from "../core/workflow.js";
@@ -25,6 +26,16 @@ export function colorStatus(status: string): string {
     default:
       return status;
   }
+}
+
+export function getStatusSessionLine(ticket: TicketState): string | null {
+  const lookup = getTicketSession(ticket);
+  if (!lookup) {
+    return null;
+  }
+
+  const phaseSuffix = lookup.phase ? ` (${lookup.phase})` : "";
+  return `${lookup.session.provider}:${lookup.session.id}${phaseSuffix}`;
 }
 
 function phaseProgress(
@@ -66,12 +77,9 @@ async function printTicketDetail(
     console.log(`    PR: ${chalk.dim(ticket.context.pr_url)}`);
   }
 
-  const sessions = ticket.phaseHistory.filter((h) => h.session);
-  if (sessions.length > 0) {
-    const latest = sessions[sessions.length - 1];
-    console.log(
-      `    Session: ${chalk.dim(`${latest.session?.provider}:${latest.session?.id}`)} ${chalk.dim(`(${latest.phase})`)}`,
-    );
+  const sessionLine = getStatusSessionLine(ticket);
+  if (sessionLine) {
+    console.log(`    Session: ${chalk.dim(sessionLine)}`);
   }
 }
 
