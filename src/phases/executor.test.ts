@@ -19,7 +19,14 @@ function makeLogger(): Logger {
   });
 }
 
-function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
+function makeTicket({
+  currentSession = null,
+  phaseHistory = [],
+  context = {},
+  retries = {},
+  error = null,
+  ...overrides
+}: Partial<TicketState> = {}): TicketState {
   return {
     planId: "plan-1",
     ticketId: "TICKET-1",
@@ -35,11 +42,12 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     status: "running",
     currentPhase: "run_script",
     currentSessionId: null,
-    phaseHistory: [],
-    context: {},
-    retries: {},
-    error: null,
     ...overrides,
+    currentSession,
+    phaseHistory,
+    context,
+    retries,
+    error,
   };
 }
 

@@ -13,7 +13,14 @@ import { TicketLogsScreen } from "./TicketLogsScreen.js";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
+function makeTicket({
+  currentSession = null,
+  phaseHistory = [],
+  context = {},
+  retries = {},
+  error = null,
+  ...overrides
+}: Partial<TicketState> = {}): TicketState {
   return {
     planId: "plan-1",
     ticketId: "T-1",
@@ -29,11 +36,12 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     status: "running",
     currentPhase: "implement",
     currentSessionId: null,
-    phaseHistory: [],
-    context: {},
-    retries: {},
-    error: null,
     ...overrides,
+    currentSession,
+    phaseHistory,
+    context,
+    retries,
+    error,
   };
 }
 

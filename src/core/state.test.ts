@@ -40,6 +40,7 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     status: "queued",
     currentPhase: "init",
     currentSessionId: null,
+    currentSession: null,
     phaseHistory: [],
     context: {},
     retries: {},
@@ -138,6 +139,55 @@ describe("StateManager", () => {
 
       expect(updated.status).toBe("running");
       expect(updated.currentPhase).toBe("build");
+    });
+
+    it("persists structured session fields alongside legacy compatibility fields", async () => {
+      const sm = createStateManager(stateDir);
+      await sm.savePlan(makePlan());
+      const ticket = makeTicket({
+        currentSessionId: "legacy-current-session",
+        currentSession: { id: "structured-current-session" },
+        phaseHistory: [
+          {
+            phase: "implement",
+            status: "success",
+            startedAt: "2025-01-01T00:00:00Z",
+            completedAt: "2025-01-01T00:05:00Z",
+            sessionId: "legacy-phase-session",
+            session: { id: "structured-phase-session" },
+          },
+        ],
+      });
+      await sm.saveTicket(ticket);
+
+      const retrieved = await sm.getTicket("plan-1", "t-1");
+      expect(retrieved).toEqual(ticket);
+    });
+
+    it("reads legacy-only session fields without requiring structured session data", async () => {
+      const sm = createStateManager(stateDir);
+      await sm.savePlan(makePlan());
+      const ticket = makeTicket({
+        currentSessionId: "legacy-current-session",
+        phaseHistory: [
+          {
+            phase: "implement",
+            status: "success",
+            startedAt: "2025-01-01T00:00:00Z",
+            completedAt: "2025-01-01T00:05:00Z",
+            sessionId: "legacy-phase-session",
+          },
+        ],
+      });
+      await sm.saveTicket(ticket);
+
+      const retrieved = await sm.getTicket("plan-1", "t-1");
+      expect(retrieved?.currentSessionId).toBe("legacy-current-session");
+      expect(retrieved?.currentSession).toBeNull();
+      expect(retrieved?.phaseHistory[0]?.sessionId).toBe(
+        "legacy-phase-session",
+      );
+      expect(retrieved?.phaseHistory[0]?.session).toBeUndefined();
     });
 
     it("throws when updating nonexistent ticket", async () => {

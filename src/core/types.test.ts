@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   AgentConfigSchema,
+  AgentSessionSchema,
   OrchestratorConfigSchema,
   PhaseHistoryEntrySchema,
   PlanFileSchema,
   RawOrchestratorConfigSchema,
+  TicketStateSchema,
   TicketStatusSchema,
   WorkflowDefinitionSchema,
 } from "./types.js";
@@ -151,6 +153,19 @@ describe("TicketStatusSchema", () => {
   });
 });
 
+describe("AgentSessionSchema", () => {
+  it("parses a valid agent session", () => {
+    const result = AgentSessionSchema.parse({
+      id: "cc807f8c-1234-5678-abcd-ef0123456789",
+    });
+    expect(result.id).toBe("cc807f8c-1234-5678-abcd-ef0123456789");
+  });
+
+  it("rejects missing id", () => {
+    expect(() => AgentSessionSchema.parse({})).toThrow();
+  });
+});
+
 describe("PlanFileSchema", () => {
   const validPlan = {
     id: "plan-1",
@@ -212,6 +227,7 @@ describe("PhaseHistoryEntrySchema", () => {
       completedAt: "2025-01-01T00:05:00Z",
     });
     expect(result.sessionId).toBeUndefined();
+    expect(result.session).toBeUndefined();
   });
 
   it("parses entry with sessionId", () => {
@@ -223,6 +239,92 @@ describe("PhaseHistoryEntrySchema", () => {
       sessionId: "cc807f8c-1234-5678-abcd-ef0123456789",
     });
     expect(result.sessionId).toBe("cc807f8c-1234-5678-abcd-ef0123456789");
+  });
+
+  it("parses entry with structured session", () => {
+    const result = PhaseHistoryEntrySchema.parse({
+      phase: "implement",
+      status: "success",
+      startedAt: "2025-01-01T00:00:00Z",
+      completedAt: "2025-01-01T00:05:00Z",
+      session: {
+        id: "cc807f8c-1234-5678-abcd-ef0123456789",
+      },
+    });
+    expect(result.session).toEqual({
+      id: "cc807f8c-1234-5678-abcd-ef0123456789",
+    });
+  });
+
+  it("accepts both legacy and structured session fields together", () => {
+    const result = PhaseHistoryEntrySchema.parse({
+      phase: "implement",
+      status: "success",
+      startedAt: "2025-01-01T00:00:00Z",
+      completedAt: "2025-01-01T00:05:00Z",
+      sessionId: "legacy-session",
+      session: {
+        id: "structured-session",
+      },
+    });
+    expect(result.sessionId).toBe("legacy-session");
+    expect(result.session).toEqual({ id: "structured-session" });
+  });
+});
+
+describe("TicketStateSchema", () => {
+  const validTicket = {
+    planId: "plan-1",
+    ticketId: "ticket-1",
+    title: "Test Ticket",
+    description: "Do the thing",
+    acceptanceCriteria: [],
+    linearUrl: null,
+    repo: "my-repo",
+    workflow: "default",
+    branch: "feature/ticket-1",
+    worktree: "/tmp/worktrees/ticket-1",
+    agent: null,
+    status: "queued",
+    currentPhase: "setup",
+    phaseHistory: [],
+    context: {},
+    retries: {},
+    error: null,
+  };
+
+  it("defaults currentSession to null when omitted", () => {
+    const result = TicketStateSchema.parse(validTicket);
+    expect(result.currentSessionId).toBeNull();
+    expect(result.currentSession).toBeNull();
+  });
+
+  it("parses structured and legacy session state together", () => {
+    const result = TicketStateSchema.parse({
+      ...validTicket,
+      currentSessionId: "legacy-session",
+      currentSession: {
+        id: "structured-session",
+      },
+      phaseHistory: [
+        {
+          phase: "implement",
+          status: "success",
+          startedAt: "2025-01-01T00:00:00Z",
+          completedAt: "2025-01-01T00:05:00Z",
+          sessionId: "legacy-phase-session",
+          session: {
+            id: "structured-phase-session",
+          },
+        },
+      ],
+    });
+    expect(result.currentSessionId).toBe("legacy-session");
+    expect(result.currentSession).toEqual({ id: "structured-session" });
+    expect(result.phaseHistory[0]?.sessionId).toBe("legacy-phase-session");
+    expect(result.phaseHistory[0]?.session).toEqual({
+      id: "structured-phase-session",
+    });
   });
 });
 

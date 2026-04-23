@@ -59,7 +59,14 @@ phases:
     };
   }
 
-  function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
+  function makeTicket({
+    currentSession = null,
+    phaseHistory = [],
+    context = {},
+    retries = {},
+    error = null,
+    ...overrides
+  }: Partial<TicketState> = {}): TicketState {
     return {
       planId: "test-plan",
       ticketId: "TICKET-1",
@@ -75,11 +82,12 @@ phases:
       status: "ready",
       currentPhase: "run_script",
       currentSessionId: null,
-      phaseHistory: [],
-      context: {},
-      retries: {},
-      error: null,
       ...overrides,
+      currentSession,
+      phaseHistory,
+      context,
+      retries,
+      error,
     };
   }
 
