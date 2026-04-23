@@ -13,6 +13,7 @@ WORKTREE_PATH="$3"
 cd "$REPO_PATH"
 
 git fetch origin
+git pull
 
 if git worktree add "$WORKTREE_PATH" -b "$BRANCH_NAME" 2>/dev/null; then
   echo "Created worktree at $WORKTREE_PATH on new branch $BRANCH_NAME"
