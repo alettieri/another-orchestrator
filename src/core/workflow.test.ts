@@ -175,6 +175,19 @@ phases:
     });
   });
 
+  describe("bundled cleanup phases", () => {
+    it("pass worktree and branch to cleanup-worktree.sh", async () => {
+      const loader = createWorkflowLoader([join(process.cwd(), "workflows")]);
+
+      for (const workflowName of ["standard", "manual-pr", "bugfix"]) {
+        const cleanup = await loader.getPhase(workflowName, "cleanup");
+        expect(cleanup.type).toBe("script");
+        expect(cleanup.command).toBe("cleanup-worktree.sh");
+        expect(cleanup.args).toEqual(["{{ worktree }}", "{{ branch }}"]);
+      }
+    });
+  });
+
   describe("getPhase", () => {
     it("returns a specific phase definition", async () => {
       const loader = createWorkflowLoader([tmpDir]);
