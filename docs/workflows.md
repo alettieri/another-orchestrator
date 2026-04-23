@@ -108,7 +108,7 @@ capture:
 | Script | Arguments | Description |
 |--------|-----------|-------------|
 | `setup.sh` | repo, branch, worktree | Creates git worktree for the branch |
-| `cleanup.sh` | worktree | Removes the git worktree |
+| `cleanup-worktree.sh` | worktree, branch | Removes the git worktree, then deletes the local branch if Git allows it |
 | `check-pr-review.sh` | repo_path, pr_number | Checks PR review status (approved/changes_requested) |
 | `check-pr-merged.sh` | repo_path, pr_number | Checks if PR is merged/closed |
 | `route-review.sh` | review_state | Routes based on review decision (approved→0, else→1) |

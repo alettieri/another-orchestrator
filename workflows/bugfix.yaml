@@ -100,9 +100,10 @@ phases:
 
   - id: cleanup
     type: script
-    command: cleanup.sh
+    command: cleanup-worktree.sh
     args:
       - "{{ worktree }}"
+      - "{{ branch }}"
     onSuccess: complete
     onFailure: complete
 

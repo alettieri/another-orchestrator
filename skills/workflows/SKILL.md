@@ -406,7 +406,7 @@ phases:
   - id: cleanup
     type: script
     command: cleanup-worktree.sh
-    args: ["{{worktree}}"]
+    args: ["{{worktree}}", "{{branch}}"]
     onSuccess: complete
     onFailure: complete
 
