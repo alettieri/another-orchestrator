@@ -1,4 +1,8 @@
-import type { AgentConfig } from "../core/types.js";
+import {
+  type AgentConfig,
+  type AgentSession,
+  AgentSessionSchema,
+} from "../core/types.js";
 import { execCommandStreaming } from "../utils/shell.js";
 
 export interface AgentInvocation {
@@ -14,11 +18,13 @@ export interface AgentResult {
   exitCode: number;
   success: boolean;
   sessionId?: string;
+  session?: AgentSession;
 }
 
 export interface AgentCallbacks {
   onOutput?: (chunk: string) => void;
   onSessionId?: (sessionId: string) => void | Promise<void>;
+  onSession?: (session: AgentSession) => void | Promise<void>;
 }
 
 const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
@@ -57,9 +63,11 @@ export function buildAgentArgs(
 
 export function createClaudeStreamParser(options?: {
   onSessionId?: (sessionId: string) => void | Promise<void>;
+  onSession?: (session: AgentSession) => void | Promise<void>;
 }) {
   let buffer = "";
   let sessionId: string | undefined;
+  let session: AgentSession | undefined;
   let finalText: string | undefined;
 
   function handleLine(line: string): void {
@@ -83,7 +91,9 @@ export function createClaudeStreamParser(options?: {
       typeof e.session_id === "string"
     ) {
       sessionId = e.session_id;
+      session = AgentSessionSchema.parse({ id: sessionId });
       void options?.onSessionId?.(sessionId);
+      void options?.onSession?.(session);
       return;
     }
 
@@ -111,6 +121,9 @@ export function createClaudeStreamParser(options?: {
     get sessionId() {
       return sessionId;
     },
+    get session() {
+      return session;
+    },
     get finalText() {
       return finalText;
     },
@@ -128,6 +141,7 @@ export async function invokeAgent(
   if (agentConfig.command === "claude") {
     const parser = createClaudeStreamParser({
       onSessionId: callbacks?.onSessionId,
+      onSession: callbacks?.onSession,
     });
 
     const result = await execCommandStreaming(command, args, {
@@ -148,6 +162,7 @@ export async function invokeAgent(
       exitCode: result.exitCode,
       success: result.exitCode === 0,
       sessionId: parser.sessionId,
+      session: parser.session,
     };
   }
 

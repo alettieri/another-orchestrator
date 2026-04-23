@@ -11,6 +11,14 @@ import {
   WorkflowDefinitionSchema,
 } from "./types.js";
 
+const SESSION_ID = "cc807f8c-1234-5678-abcd-ef0123456789";
+const PHASE_HISTORY_BASE = {
+  phase: "implement",
+  status: "success" as const,
+  startedAt: "2025-01-01T00:00:00Z",
+  completedAt: "2025-01-01T00:05:00Z",
+};
+
 describe("AgentConfigSchema", () => {
   it("parses a valid agent config", () => {
     const result = AgentConfigSchema.parse({
@@ -156,9 +164,9 @@ describe("TicketStatusSchema", () => {
 describe("AgentSessionSchema", () => {
   it("parses a valid agent session", () => {
     const result = AgentSessionSchema.parse({
-      id: "cc807f8c-1234-5678-abcd-ef0123456789",
+      id: SESSION_ID,
     });
-    expect(result.id).toBe("cc807f8c-1234-5678-abcd-ef0123456789");
+    expect(result.id).toBe(SESSION_ID);
   });
 
   it("rejects missing id", () => {
@@ -220,48 +228,34 @@ describe("PlanFileSchema", () => {
 
 describe("PhaseHistoryEntrySchema", () => {
   it("parses entry without sessionId", () => {
-    const result = PhaseHistoryEntrySchema.parse({
-      phase: "implement",
-      status: "success",
-      startedAt: "2025-01-01T00:00:00Z",
-      completedAt: "2025-01-01T00:05:00Z",
-    });
+    const result = PhaseHistoryEntrySchema.parse(PHASE_HISTORY_BASE);
     expect(result.sessionId).toBeUndefined();
     expect(result.session).toBeUndefined();
   });
 
   it("parses entry with sessionId", () => {
     const result = PhaseHistoryEntrySchema.parse({
-      phase: "implement",
-      status: "success",
-      startedAt: "2025-01-01T00:00:00Z",
-      completedAt: "2025-01-01T00:05:00Z",
-      sessionId: "cc807f8c-1234-5678-abcd-ef0123456789",
+      ...PHASE_HISTORY_BASE,
+      sessionId: SESSION_ID,
     });
-    expect(result.sessionId).toBe("cc807f8c-1234-5678-abcd-ef0123456789");
+    expect(result.sessionId).toBe(SESSION_ID);
   });
 
   it("parses entry with structured session", () => {
     const result = PhaseHistoryEntrySchema.parse({
-      phase: "implement",
-      status: "success",
-      startedAt: "2025-01-01T00:00:00Z",
-      completedAt: "2025-01-01T00:05:00Z",
+      ...PHASE_HISTORY_BASE,
       session: {
-        id: "cc807f8c-1234-5678-abcd-ef0123456789",
+        id: SESSION_ID,
       },
     });
     expect(result.session).toEqual({
-      id: "cc807f8c-1234-5678-abcd-ef0123456789",
+      id: SESSION_ID,
     });
   });
 
   it("accepts both legacy and structured session fields together", () => {
     const result = PhaseHistoryEntrySchema.parse({
-      phase: "implement",
-      status: "success",
-      startedAt: "2025-01-01T00:00:00Z",
-      completedAt: "2025-01-01T00:05:00Z",
+      ...PHASE_HISTORY_BASE,
       sessionId: "legacy-session",
       session: {
         id: "structured-session",
@@ -308,10 +302,7 @@ describe("TicketStateSchema", () => {
       },
       phaseHistory: [
         {
-          phase: "implement",
-          status: "success",
-          startedAt: "2025-01-01T00:00:00Z",
-          completedAt: "2025-01-01T00:05:00Z",
+          ...PHASE_HISTORY_BASE,
           sessionId: "legacy-phase-session",
           session: {
             id: "structured-phase-session",
