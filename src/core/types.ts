@@ -16,6 +16,7 @@ export const McpServerConfigSchema = z.object({
 });
 
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
+const PostSetupWorktreeHooksSchema = z.array(z.string()).default([]);
 
 // Raw schema: what the YAML config file contains (directory fields optional)
 export const RawOrchestratorConfigSchema = z.object({
@@ -27,6 +28,7 @@ export const RawOrchestratorConfigSchema = z.object({
   promptDir: z.string().optional(),
   scriptDir: z.string().optional(),
   skillsDir: z.string().optional(),
+  postSetupWorktreeHooks: PostSetupWorktreeHooksSchema,
   pollInterval: z.number().default(10),
   maxConcurrency: z.number().default(3),
   ghCommand: z.string().default("gh"),
@@ -48,6 +50,7 @@ export const OrchestratorConfigSchema = z.object({
   promptSearchPath: z.array(z.string()),
   scriptDir: z.string(),
   skillsDir: z.string(),
+  postSetupWorktreeHooks: PostSetupWorktreeHooksSchema,
   pollInterval: z.number().default(10),
   maxConcurrency: z.number().default(3),
   ghCommand: z.string().default("gh"),

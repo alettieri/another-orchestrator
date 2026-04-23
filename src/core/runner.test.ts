@@ -136,6 +136,7 @@ phases:
       promptSearchPath: [promptDir],
       scriptDir,
       skillsDir: join(tmpDir, "skills"),
+      postSetupWorktreeHooks: [],
       pollInterval: 10,
       maxConcurrency: 3,
       ghCommand: "gh",

@@ -17,6 +17,7 @@ const mockConfig: OrchestratorConfig = {
   promptSearchPath: ["/abs/prompts"],
   scriptDir: "/abs/scripts",
   skillsDir: "/abs/skills",
+  postSetupWorktreeHooks: [],
   pollInterval: 10,
   maxConcurrency: 3,
   ghCommand: "gh",

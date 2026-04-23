@@ -73,6 +73,9 @@ workflowDir: ./workflows
 promptDir: ./prompts
 scriptDir: ./scripts
 skillsDir: ./skills
+postSetupWorktreeHooks:
+  - pnpm install
+  - pnpm run build
 
 # Optional: runner settings
 pollInterval: 10        # seconds between daemon ticks (default: 10)
@@ -126,6 +129,12 @@ Where bash scripts for infrastructure phases live. Default: bundled `scripts/` f
 ### `skillsDir` (string, optional)
 
 Where skill documentation lives. Default: bundled `skills/` from the installed package.
+
+### `postSetupWorktreeHooks` (string[], optional)
+
+Ordered shell commands to run inside each newly created worktree after `git worktree add` succeeds. Default: `[]`.
+
+Failures are logged but do not fail the setup phase, so use this for best-effort project bootstrap steps such as dependency installation or builds.
 
 ### `pollInterval` (number, optional)
 
@@ -197,6 +206,16 @@ workflowDir: /path/to/my/workflows
 ```
 
 Paths are resolved relative to the config file location. Absolute paths also work.
+
+### Running Project Bootstrap Commands After Worktree Setup
+
+```yaml
+postSetupWorktreeHooks:
+  - pnpm install
+  - pnpm run build
+```
+
+Hooks run in order from inside the created worktree. If one fails, the failure is logged and the workflow still continues.
 
 ### Customizing Prompt Templates
 

@@ -56,6 +56,9 @@ export function createPhaseExecutor(
     const args = (phase.args ?? []).map((a) =>
       templateRenderer.renderString(a, ticket),
     );
+    if (phase.command === "setup-worktree.sh") {
+      args.push(JSON.stringify(config.postSetupWorktreeHooks));
+    }
 
     log.info(`Running script: ${scriptPath} ${args.join(" ")}`);
 

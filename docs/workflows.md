@@ -17,6 +17,8 @@ Workflows define the phase graph that tickets are executed through. Each workflo
 
 Runs a bash script from the configured `scriptDir`.
 
+The built-in `setup-worktree.sh` script also receives the global `postSetupWorktreeHooks` config payload and runs those commands inside the new worktree on a best-effort basis.
+
 | Field | Type | Description |
 |-------|------|-------------|
 | `command` | string | Script filename (required) |

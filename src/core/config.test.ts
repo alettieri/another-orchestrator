@@ -30,6 +30,9 @@ workflowDir: ./workflows
 promptDir: ./prompts
 scriptDir: ./scripts
 skillsDir: ./skills
+postSetupWorktreeHooks:
+  - pnpm install
+  - pnpm run build
 `;
 
 describe("resolveOrchestratorHome", () => {
@@ -124,6 +127,10 @@ describe("loadConfig", () => {
     expect(config.orchestratorHome).toBe(resolveOrchestratorHome());
     expect(config.pollInterval).toBe(10);
     expect(config.maxConcurrency).toBe(3);
+    expect(config.postSetupWorktreeHooks).toEqual([
+      "pnpm install",
+      "pnpm run build",
+    ]);
   });
 
   it("resolves explicit relative paths based on config dir", async () => {
@@ -194,6 +201,16 @@ describe("loadConfig", () => {
       join(tmpDir, "home", "workflows"),
       join(pkgDir, "workflows"),
     ]);
+    expect(config.postSetupWorktreeHooks).toEqual([]);
+  });
+
+  it("accepts an explicit empty post-setup hook list", async () => {
+    const configPath = join(tmpDir, "orchestrator.yaml");
+    await writeFile(configPath, `${minimalYaml}postSetupWorktreeHooks: []\n`);
+
+    const config = await loadConfig({ configPath, packageDir: pkgDir });
+
+    expect(config.postSetupWorktreeHooks).toEqual([]);
   });
 
   it("throws on invalid YAML", async () => {
@@ -240,6 +257,7 @@ describe("resolveAgent", () => {
     promptSearchPath: ["/tmp/prompts"],
     scriptDir: "/tmp/scripts",
     skillsDir: "/tmp/skills",
+    postSetupWorktreeHooks: [],
     pollInterval: 10,
     maxConcurrency: 3,
     ghCommand: "gh",

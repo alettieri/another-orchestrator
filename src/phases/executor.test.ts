@@ -72,6 +72,7 @@ describe("executor", () => {
       promptSearchPath: [promptDir],
       scriptDir,
       skillsDir: join(tmpDir, "skills"),
+      postSetupWorktreeHooks: [],
       pollInterval: 10,
       maxConcurrency: 3,
       ghCommand: "gh",
@@ -85,6 +86,19 @@ describe("executor", () => {
   });
 
   describe("script phase", () => {
+    function makeSetupWorktreePhase(): PhaseDefinition {
+      return {
+        id: "setup",
+        type: "script",
+        command: "setup-worktree.sh",
+        args: ["{{ repo }}", "{{ branch }}", "{{ worktree }}"],
+        maxRetries: 0,
+        notify: false,
+        onSuccess: "complete",
+        onFailure: "abort",
+      };
+    }
+
     it("executes a script and returns success", async () => {
       await writeFile(
         join(scriptDir, "success.sh"),
@@ -166,6 +180,56 @@ describe("executor", () => {
 
       expect(result.success).toBe(true);
       expect(result.output.trim()).toBe("branch=feat/my-branch repo=my-repo");
+    });
+
+    it("passes an empty hook payload to setup-worktree.sh by default", async () => {
+      await writeFile(
+        join(scriptDir, "setup-worktree.sh"),
+        '#!/usr/bin/env bash\necho "argc=$# hook_json=$4"',
+        { mode: 0o755 },
+      );
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger);
+      const result = await executor.execute(
+        makeSetupWorktreePhase(),
+        makeTicket({
+          repo: "/tmp/repo",
+          branch: "feat/test",
+          worktree: "/tmp/worktree",
+        }),
+        null,
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.output.trim()).toBe("argc=4 hook_json=[]");
+    });
+
+    it("passes configured hooks to setup-worktree.sh", async () => {
+      config.postSetupWorktreeHooks = ["pnpm install", "pnpm run build"];
+
+      await writeFile(
+        join(scriptDir, "setup-worktree.sh"),
+        '#!/usr/bin/env bash\necho "hook_json=$4"',
+        { mode: 0o755 },
+      );
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger);
+      const result = await executor.execute(
+        makeSetupWorktreePhase(),
+        makeTicket({
+          repo: "/tmp/repo",
+          branch: "feat/test",
+          worktree: "/tmp/worktree",
+        }),
+        null,
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.output.trim()).toBe(
+        'hook_json=["pnpm install","pnpm run build"]',
+      );
     });
   });
 

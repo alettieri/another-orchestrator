@@ -43,6 +43,7 @@ describe("RawOrchestratorConfigSchema", () => {
     expect(result.promptDir).toBeUndefined();
     expect(result.scriptDir).toBeUndefined();
     expect(result.skillsDir).toBeUndefined();
+    expect(result.postSetupWorktreeHooks).toEqual([]);
   });
 
   it("accepts config with explicit directory fields", () => {
@@ -57,9 +58,14 @@ describe("RawOrchestratorConfigSchema", () => {
       promptDir: "./prompts",
       scriptDir: "./scripts",
       skillsDir: "./skills",
+      postSetupWorktreeHooks: ["pnpm install", "pnpm run build"],
     });
     expect(result.stateDir).toBe("./state");
     expect(result.skillsDir).toBe("./skills");
+    expect(result.postSetupWorktreeHooks).toEqual([
+      "pnpm install",
+      "pnpm run build",
+    ]);
   });
 
   it("applies defaults for non-directory fields", () => {
@@ -72,6 +78,7 @@ describe("RawOrchestratorConfigSchema", () => {
     expect(result.pollInterval).toBe(10);
     expect(result.maxConcurrency).toBe(3);
     expect(result.ghCommand).toBe("gh");
+    expect(result.postSetupWorktreeHooks).toEqual([]);
   });
 });
 
@@ -90,6 +97,7 @@ describe("OrchestratorConfigSchema", () => {
     promptSearchPath: ["prompts"],
     scriptDir: "scripts",
     skillsDir: "skills",
+    postSetupWorktreeHooks: [],
   };
 
   it("parses a valid config with defaults", () => {
@@ -98,6 +106,7 @@ describe("OrchestratorConfigSchema", () => {
     expect(result.maxConcurrency).toBe(3);
     expect(result.ghCommand).toBe("gh");
     expect(result.skillsDir).toBe("skills");
+    expect(result.postSetupWorktreeHooks).toEqual([]);
   });
 
   it("allows overriding defaults", () => {
@@ -106,10 +115,12 @@ describe("OrchestratorConfigSchema", () => {
       pollInterval: 30,
       maxConcurrency: 5,
       ghCommand: "/usr/local/bin/gh",
+      postSetupWorktreeHooks: ["pnpm install"],
     });
     expect(result.pollInterval).toBe(30);
     expect(result.maxConcurrency).toBe(5);
     expect(result.ghCommand).toBe("/usr/local/bin/gh");
+    expect(result.postSetupWorktreeHooks).toEqual(["pnpm install"]);
   });
 
   it("rejects missing required fields", () => {
