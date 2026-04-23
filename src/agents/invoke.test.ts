@@ -3,6 +3,7 @@ import * as shell from "../utils/shell.js";
 import {
   buildAgentArgs,
   createClaudeStreamParser,
+  createCodexStreamParser,
   invokeAgent,
 } from "./invoke.js";
 
@@ -58,7 +59,7 @@ describe("buildAgentArgs", () => {
     );
 
     expect(result.command).toBe("codex");
-    expect(result.args).toEqual(["exec", "refactor code", "--quiet"]);
+    expect(result.args).toEqual(["exec", "--json", "refactor code", "--quiet"]);
   });
 
   it("builds args for unknown agent", () => {
@@ -94,7 +95,6 @@ describe("createClaudeStreamParser", () => {
     );
     parser.end();
 
-    expect(parser.sessionId).toBe("abc-123");
     expect(parser.session).toEqual({ id: "abc-123", provider: "claude" });
     expect(onSession).toHaveBeenCalledTimes(1);
     expect(onSession).toHaveBeenCalledWith({
@@ -154,7 +154,102 @@ describe("createClaudeStreamParser", () => {
     parser.feed("null\n");
     parser.end();
     expect(parser.finalText).toBeUndefined();
-    expect(parser.sessionId).toBeUndefined();
+    expect(parser.session).toBeUndefined();
+  });
+});
+
+describe("createCodexStreamParser", () => {
+  it("extracts thread_id from the first thread.started event and fires callback once", () => {
+    const onSession = vi.fn();
+    const parser = createCodexStreamParser({ onSession });
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "thread.started",
+        thread_id: "codex-123",
+      })}\n`,
+    );
+    parser.feed(
+      `${JSON.stringify({
+        type: "thread.started",
+        thread_id: "codex-456",
+      })}\n`,
+    );
+    parser.end();
+
+    expect(parser.session).toEqual({ id: "codex-123", provider: "codex" });
+    expect(onSession).toHaveBeenCalledTimes(1);
+    expect(onSession).toHaveBeenCalledWith({
+      id: "codex-123",
+      provider: "codex",
+    });
+  });
+
+  it("extracts final text from an agent_message item.completed event", () => {
+    const parser = createCodexStreamParser();
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "item.completed",
+        item: {
+          id: "item_1",
+          type: "agent_message",
+          text: "final output",
+        },
+      })}\n`,
+    );
+    parser.end();
+
+    expect(parser.finalText).toBe("final output");
+  });
+
+  it("ignores malformed and unrelated JSONL lines without throwing", () => {
+    const parser = createCodexStreamParser();
+
+    expect(() => {
+      parser.feed(
+        'not json\n{"type":"turn.started"}\n{"type":"thread.started","thread_id":"ok"}\n',
+      );
+      parser.end();
+    }).not.toThrow();
+
+    expect(parser.session).toEqual({ id: "ok", provider: "codex" });
+    expect(parser.finalText).toBeUndefined();
+  });
+
+  it("handles a JSON event split across two feed calls", () => {
+    const parser = createCodexStreamParser();
+
+    parser.feed('{"type":"thread.st');
+    parser.feed('arted","thread_id":"codex-split"}\n');
+    parser.end();
+
+    expect(parser.session).toEqual({
+      id: "codex-split",
+      provider: "codex",
+    });
+  });
+
+  it("handles a trailing event without a newline via end()", () => {
+    const parser = createCodexStreamParser();
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "item.completed",
+        item: { type: "agent_message", text: "final" },
+      })}`,
+    );
+    parser.end();
+
+    expect(parser.finalText).toBe("final");
+  });
+
+  it("ignores non-object JSON values", () => {
+    const parser = createCodexStreamParser();
+    parser.feed("42\n");
+    parser.feed("null\n");
+    parser.end();
+    expect(parser.finalText).toBeUndefined();
     expect(parser.session).toBeUndefined();
   });
 });
@@ -311,6 +406,139 @@ describe("invokeAgent", () => {
 
       expect(result.stdout).toBe("");
       expect(result.session).toBeUndefined();
+    });
+  });
+
+  describe("codex json parsing", () => {
+    let spy: ReturnType<typeof vi.spyOn>;
+    let warnSpy: ReturnType<typeof vi.spyOn>;
+
+    afterEach(() => {
+      spy?.mockRestore();
+      warnSpy?.mockRestore();
+    });
+
+    it("parses thread_id and final text from the JSONL event stream", async () => {
+      const events = [
+        JSON.stringify({
+          type: "thread.started",
+          thread_id: "019dbbdd-c498-7490-98e6-b01dcd46b8bb",
+        }),
+        JSON.stringify({ type: "turn.started" }),
+        JSON.stringify({
+          type: "item.completed",
+          item: {
+            id: "item_1",
+            type: "agent_message",
+            text: "Hello from Codex",
+          },
+        }),
+        JSON.stringify({ type: "turn.completed" }),
+      ];
+      const rawStream = `${events.join("\n")}\n`;
+
+      spy = vi
+        .spyOn(shell, "execCommandStreaming")
+        .mockImplementation((_cmd, _args, options) => {
+          options?.onStdout?.(rawStream);
+          return Promise.resolve({
+            stdout: rawStream,
+            stderr: "",
+            exitCode: 0,
+          });
+        });
+
+      const onSession = vi.fn();
+      const result = await invokeAgent(
+        { command: "codex", defaultArgs: [] },
+        { prompt: "Say Hello" },
+        { onSession },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe("Hello from Codex");
+      expect(result.session).toEqual({
+        id: "019dbbdd-c498-7490-98e6-b01dcd46b8bb",
+        provider: "codex",
+      });
+      expect(onSession).toHaveBeenCalledTimes(1);
+      expect(onSession).toHaveBeenCalledWith({
+        id: "019dbbdd-c498-7490-98e6-b01dcd46b8bb",
+        provider: "codex",
+      });
+    });
+
+    it("ignores malformed and unrelated lines while capturing codex session", async () => {
+      const rawStream = [
+        "not json",
+        JSON.stringify({ type: "turn.started" }),
+        JSON.stringify({
+          type: "thread.started",
+          thread_id: "codex-session",
+        }),
+        JSON.stringify({
+          type: "item.completed",
+          item: {
+            id: "item_1",
+            type: "reasoning",
+            text: "internal",
+          },
+        }),
+      ].join("\n");
+
+      spy = vi
+        .spyOn(shell, "execCommandStreaming")
+        .mockImplementation((_cmd, _args, options) => {
+          options?.onStdout?.(`${rawStream}\n`);
+          return Promise.resolve({
+            stdout: `${rawStream}\n`,
+            stderr: "",
+            exitCode: 0,
+          });
+        });
+
+      const result = await invokeAgent(
+        { command: "codex", defaultArgs: [] },
+        { prompt: "noop" },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.session).toEqual({
+        id: "codex-session",
+        provider: "codex",
+      });
+      expect(result.stdout).toBe(`${rawStream}\n`);
+    });
+
+    it("warns and leaves session unset when codex exits successfully without thread_id", async () => {
+      const rawStream = `${JSON.stringify({
+        type: "item.completed",
+        item: { id: "item_1", type: "agent_message", text: "done" },
+      })}\n`;
+
+      warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      spy = vi
+        .spyOn(shell, "execCommandStreaming")
+        .mockImplementation((_cmd, _args, options) => {
+          options?.onStdout?.(rawStream);
+          return Promise.resolve({
+            stdout: rawStream,
+            stderr: "",
+            exitCode: 0,
+          });
+        });
+
+      const result = await invokeAgent(
+        { command: "codex", defaultArgs: [] },
+        { prompt: "noop" },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.stdout).toBe("done");
+      expect(result.session).toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        "Codex completed successfully without emitting a thread_id",
+      );
     });
   });
 
