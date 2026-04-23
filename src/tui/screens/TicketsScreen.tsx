@@ -14,7 +14,7 @@ import { PHASE_COLORS, PHASE_LABELS } from "../constants/phase.js";
 import type { PhaseId } from "../types/phase.js";
 import {
   computeSkipUpdate,
-  getLatestSessionId,
+  getLatestSession,
 } from "./TicketsScreen.helpers.js";
 
 interface TicketsScreenProps {
@@ -128,7 +128,7 @@ export function TicketsScreen({
     return tickets.map((ticket, index) => {
       const retryCount = getRetryCount(ticket);
       const blockedBy = getBlockedBy(plan, ticket.ticketId);
-      const sessionId = getLatestSessionId(ticket);
+      const session = getLatestSession(ticket);
 
       return {
         ticket: ticket.ticketId,
@@ -143,7 +143,7 @@ export function TicketsScreen({
         age: formatAge(ticket),
         session: (
           <SessionCopyCell
-            sessionId={sessionId}
+            session={session}
             isSelected={index === selectedIndex}
           />
         ),

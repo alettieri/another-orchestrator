@@ -165,12 +165,18 @@ describe("AgentSessionSchema", () => {
   it("parses a valid agent session", () => {
     const result = AgentSessionSchema.parse({
       id: SESSION_ID,
+      provider: "claude",
     });
     expect(result.id).toBe(SESSION_ID);
+    expect(result.provider).toBe("claude");
   });
 
   it("rejects missing id", () => {
     expect(() => AgentSessionSchema.parse({})).toThrow();
+  });
+
+  it("rejects missing provider", () => {
+    expect(() => AgentSessionSchema.parse({ id: SESSION_ID })).toThrow();
   });
 });
 
@@ -227,18 +233,9 @@ describe("PlanFileSchema", () => {
 });
 
 describe("PhaseHistoryEntrySchema", () => {
-  it("parses entry without sessionId", () => {
+  it("parses entry without session", () => {
     const result = PhaseHistoryEntrySchema.parse(PHASE_HISTORY_BASE);
-    expect(result.sessionId).toBeUndefined();
     expect(result.session).toBeUndefined();
-  });
-
-  it("parses entry with sessionId", () => {
-    const result = PhaseHistoryEntrySchema.parse({
-      ...PHASE_HISTORY_BASE,
-      sessionId: SESSION_ID,
-    });
-    expect(result.sessionId).toBe(SESSION_ID);
   });
 
   it("parses entry with structured session", () => {
@@ -246,23 +243,22 @@ describe("PhaseHistoryEntrySchema", () => {
       ...PHASE_HISTORY_BASE,
       session: {
         id: SESSION_ID,
+        provider: "claude",
       },
     });
     expect(result.session).toEqual({
       id: SESSION_ID,
+      provider: "claude",
     });
   });
 
-  it("accepts both legacy and structured session fields together", () => {
-    const result = PhaseHistoryEntrySchema.parse({
-      ...PHASE_HISTORY_BASE,
-      sessionId: "legacy-session",
-      session: {
-        id: "structured-session",
-      },
-    });
-    expect(result.sessionId).toBe("legacy-session");
-    expect(result.session).toEqual({ id: "structured-session" });
+  it("rejects legacy sessionId fields", () => {
+    expect(() =>
+      PhaseHistoryEntrySchema.parse({
+        ...PHASE_HISTORY_BASE,
+        sessionId: "legacy-session",
+      }),
+    ).toThrow();
   });
 });
 
@@ -289,33 +285,43 @@ describe("TicketStateSchema", () => {
 
   it("defaults currentSession to null when omitted", () => {
     const result = TicketStateSchema.parse(validTicket);
-    expect(result.currentSessionId).toBeNull();
     expect(result.currentSession).toBeNull();
   });
 
-  it("parses structured and legacy session state together", () => {
+  it("parses structured session state", () => {
     const result = TicketStateSchema.parse({
       ...validTicket,
-      currentSessionId: "legacy-session",
       currentSession: {
         id: "structured-session",
+        provider: "codex",
       },
       phaseHistory: [
         {
           ...PHASE_HISTORY_BASE,
-          sessionId: "legacy-phase-session",
           session: {
             id: "structured-phase-session",
+            provider: "claude",
           },
         },
       ],
     });
-    expect(result.currentSessionId).toBe("legacy-session");
-    expect(result.currentSession).toEqual({ id: "structured-session" });
-    expect(result.phaseHistory[0]?.sessionId).toBe("legacy-phase-session");
+    expect(result.currentSession).toEqual({
+      id: "structured-session",
+      provider: "codex",
+    });
     expect(result.phaseHistory[0]?.session).toEqual({
       id: "structured-phase-session",
+      provider: "claude",
     });
+  });
+
+  it("rejects legacy currentSessionId fields", () => {
+    expect(() =>
+      TicketStateSchema.parse({
+        ...validTicket,
+        currentSessionId: "legacy-session",
+      }),
+    ).toThrow();
   });
 });
 

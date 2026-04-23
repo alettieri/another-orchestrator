@@ -87,9 +87,12 @@ export type PlanFile = z.infer<typeof PlanFileSchema>;
 
 // --- Ticket ---
 
-export const AgentSessionSchema = z.object({
-  id: z.string(),
-});
+export const AgentSessionSchema = z
+  .object({
+    id: z.string(),
+    provider: z.enum(["claude", "codex"]),
+  })
+  .strict();
 
 export type AgentSession = z.infer<typeof AgentSessionSchema>;
 
@@ -105,39 +108,41 @@ export const TicketStatusSchema = z.enum([
 
 export type TicketStatus = z.infer<typeof TicketStatusSchema>;
 
-export const PhaseHistoryEntrySchema = z.object({
-  phase: z.string(),
-  status: z.enum(["success", "failure", "skipped"]),
-  startedAt: z.string(),
-  completedAt: z.string().nullable(),
-  output: z.string().optional(),
-  sessionId: z.string().optional(),
-  session: AgentSessionSchema.optional(),
-});
+export const PhaseHistoryEntrySchema = z
+  .object({
+    phase: z.string(),
+    status: z.enum(["success", "failure", "skipped"]),
+    startedAt: z.string(),
+    completedAt: z.string().nullable(),
+    output: z.string().optional(),
+    session: AgentSessionSchema.optional(),
+  })
+  .strict();
 
 export type PhaseHistoryEntry = z.infer<typeof PhaseHistoryEntrySchema>;
 
-export const TicketStateSchema = z.object({
-  planId: z.string(),
-  ticketId: z.string(),
-  title: z.string(),
-  description: z.string(),
-  acceptanceCriteria: z.array(z.string()).default([]),
-  linearUrl: z.string().nullable().default(null),
-  repo: z.string().nullable().default(null),
-  workflow: z.string(),
-  branch: z.string(),
-  worktree: z.string(),
-  agent: z.string().nullable().default(null),
-  status: TicketStatusSchema,
-  currentPhase: z.string(),
-  currentSessionId: z.string().nullable().default(null),
-  currentSession: AgentSessionSchema.nullable().default(null),
-  phaseHistory: z.array(PhaseHistoryEntrySchema).default([]),
-  context: z.record(z.string(), z.string()).default({}),
-  retries: z.record(z.string(), z.number()).default({}),
-  error: z.string().nullable().default(null),
-});
+export const TicketStateSchema = z
+  .object({
+    planId: z.string(),
+    ticketId: z.string(),
+    title: z.string(),
+    description: z.string(),
+    acceptanceCriteria: z.array(z.string()).default([]),
+    linearUrl: z.string().nullable().default(null),
+    repo: z.string().nullable().default(null),
+    workflow: z.string(),
+    branch: z.string(),
+    worktree: z.string(),
+    agent: z.string().nullable().default(null),
+    status: TicketStatusSchema,
+    currentPhase: z.string(),
+    currentSession: AgentSessionSchema.nullable().default(null),
+    phaseHistory: z.array(PhaseHistoryEntrySchema).default([]),
+    context: z.record(z.string(), z.string()).default({}),
+    retries: z.record(z.string(), z.number()).default({}),
+    error: z.string().nullable().default(null),
+  })
+  .strict();
 
 export type TicketState = z.infer<typeof TicketStateSchema>;
 

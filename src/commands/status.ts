@@ -66,11 +66,11 @@ async function printTicketDetail(
     console.log(`    PR: ${chalk.dim(ticket.context.pr_url)}`);
   }
 
-  const sessionsWithId = ticket.phaseHistory.filter((h) => h.sessionId);
-  if (sessionsWithId.length > 0) {
-    const latest = sessionsWithId[sessionsWithId.length - 1];
+  const sessions = ticket.phaseHistory.filter((h) => h.session);
+  if (sessions.length > 0) {
+    const latest = sessions[sessions.length - 1];
     console.log(
-      `    Session: ${chalk.dim(latest.sessionId)} ${chalk.dim(`(${latest.phase})`)}`,
+      `    Session: ${chalk.dim(`${latest.session?.provider}:${latest.session?.id}`)} ${chalk.dim(`(${latest.phase})`)}`,
     );
   }
 }

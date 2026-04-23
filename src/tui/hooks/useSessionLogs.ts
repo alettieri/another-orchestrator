@@ -9,7 +9,9 @@ import {
   resolveSessionPath,
 } from "../screens/TicketLogsScreen.helpers.js";
 
-type PhaseWithSession = PhaseHistoryEntry & { sessionId: string };
+type PhaseWithSession = PhaseHistoryEntry & {
+  session: { id: string; provider: "claude" };
+};
 
 function sessionLogKey(worktree: string, sessionId: string) {
   return ["session-log", worktree, sessionId] as const;
@@ -22,16 +24,16 @@ export function useSessionLogs(ticket: TicketState): LogEvent[] {
   const phasesWithSession = useMemo(
     () =>
       ticket.phaseHistory.filter(
-        (e): e is PhaseWithSession => e.sessionId != null,
+        (e): e is PhaseWithSession => e.session?.provider === "claude",
       ),
     [ticket.phaseHistory],
   );
 
   const results = useQueries({
     queries: phasesWithSession.map((entry) => ({
-      queryKey: sessionLogKey(worktree, entry.sessionId),
+      queryKey: sessionLogKey(worktree, entry.session.id),
       queryFn: async () => {
-        const path = resolveSessionPath(worktree, entry.sessionId);
+        const path = resolveSessionPath(worktree, entry.session.id);
         try {
           const content = await readFile(path, "utf-8");
           return parseSessionJsonl(content);
@@ -46,7 +48,7 @@ export function useSessionLogs(ticket: TicketState): LogEvent[] {
     if (phasesWithSession.length === 0) return;
 
     const paths = phasesWithSession.map((e) =>
-      resolveSessionPath(worktree, e.sessionId),
+      resolveSessionPath(worktree, e.session.id),
     );
 
     const watcher = watch(paths, { ignoreInitial: true });
@@ -55,7 +57,7 @@ export function useSessionLogs(ticket: TicketState): LogEvent[] {
       const idx = paths.indexOf(filePath);
       if (idx !== -1) {
         void queryClient.invalidateQueries({
-          queryKey: sessionLogKey(worktree, phasesWithSession[idx].sessionId),
+          queryKey: sessionLogKey(worktree, phasesWithSession[idx].session.id),
         });
       }
     };
@@ -75,7 +77,7 @@ export function useSessionLogs(ticket: TicketState): LogEvent[] {
       allEvents.push({
         type: "phase-divider",
         phase: entry.phase,
-        sessionId: entry.sessionId,
+        sessionId: entry.session.id,
       });
       const events = results[i]?.data ?? [];
       allEvents.push(...events);

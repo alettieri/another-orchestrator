@@ -6,22 +6,25 @@ import { createStateManager } from "./state.js";
 import type { PlanFile, TicketState } from "./types.js";
 
 const STRUCTURED_SESSION_TICKET = {
-  currentSessionId: "legacy-current-session",
-  currentSession: { id: "structured-current-session" },
+  currentSession: {
+    id: "structured-current-session",
+    provider: "codex" as const,
+  },
   phaseHistory: [
     {
       phase: "implement",
       status: "success" as const,
       startedAt: "2025-01-01T00:00:00Z",
       completedAt: "2025-01-01T00:05:00Z",
-      sessionId: "legacy-phase-session",
-      session: { id: "structured-phase-session" },
+      session: {
+        id: "structured-phase-session",
+        provider: "claude" as const,
+      },
     },
   ],
 };
 
 const LEGACY_SESSION_TICKET = {
-  currentSessionId: "legacy-current-session",
   phaseHistory: [
     {
       phase: "implement",
@@ -67,7 +70,6 @@ function makeTicket(overrides: Partial<TicketState> = {}): TicketState {
     agent: null,
     status: "queued",
     currentPhase: "init",
-    currentSessionId: null,
     currentSession: null,
     phaseHistory: [],
     context: {},
@@ -169,7 +171,7 @@ describe("StateManager", () => {
       expect(updated.currentPhase).toBe("build");
     });
 
-    it("persists structured session fields alongside legacy compatibility fields", async () => {
+    it("persists structured session fields", async () => {
       const sm = createStateManager(stateDir);
       await sm.savePlan(makePlan());
       const ticket = makeTicket(STRUCTURED_SESSION_TICKET);
@@ -179,19 +181,16 @@ describe("StateManager", () => {
       expect(retrieved).toEqual(ticket);
     });
 
-    it("reads legacy-only session fields without requiring structured session data", async () => {
+    it("rejects legacy-only session fields", async () => {
       const sm = createStateManager(stateDir);
       await sm.savePlan(makePlan());
-      const ticket = makeTicket(LEGACY_SESSION_TICKET);
-      await sm.saveTicket(ticket);
+      await writeFile(
+        join(stateDir, "plans", "plan-1", "tickets", "t-1.json"),
+        JSON.stringify(makeTicket(LEGACY_SESSION_TICKET), null, 2),
+      );
 
       const retrieved = await sm.getTicket("plan-1", "t-1");
-      expect(retrieved?.currentSessionId).toBe("legacy-current-session");
-      expect(retrieved?.currentSession).toBeNull();
-      expect(retrieved?.phaseHistory[0]?.sessionId).toBe(
-        "legacy-phase-session",
-      );
-      expect(retrieved?.phaseHistory[0]?.session).toBeUndefined();
+      expect(retrieved).toBeNull();
     });
 
     it("throws when updating nonexistent ticket", async () => {

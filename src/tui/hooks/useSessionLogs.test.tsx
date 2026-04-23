@@ -49,7 +49,6 @@ function makeTicket({
     agent: null,
     status: "running",
     currentPhase: "implement",
-    currentSessionId: null,
     ...overrides,
     currentSession,
     phaseHistory,
@@ -130,7 +129,10 @@ describe("useSessionLogs", () => {
     const ticket = makeTicket({
       worktree: "/projects/foo",
       phaseHistory: [
-        makePhaseEntry({ phase: "implement", sessionId: "sess1" }),
+        makePhaseEntry({
+          phase: "implement",
+          session: { id: "sess1", provider: "claude" },
+        }),
       ],
     });
 
@@ -158,7 +160,10 @@ describe("useSessionLogs", () => {
     const ticket = makeTicket({
       worktree: "/projects/foo",
       phaseHistory: [
-        makePhaseEntry({ phase: "implement", sessionId: "sess1" }),
+        makePhaseEntry({
+          phase: "implement",
+          session: { id: "sess1", provider: "claude" },
+        }),
       ],
     });
 
@@ -180,11 +185,18 @@ describe("useSessionLogs", () => {
     unmount();
   });
 
-  it("skips phaseHistory entries without sessionId", () => {
+  it("skips phaseHistory entries without Claude session metadata", () => {
     const ticket = makeTicket({
       phaseHistory: [
-        makePhaseEntry({ phase: "setup" }), // no sessionId
-        makePhaseEntry({ phase: "implement", sessionId: "sess1" }),
+        makePhaseEntry({ phase: "setup" }),
+        makePhaseEntry({
+          phase: "verify",
+          session: { id: "codex-1", provider: "codex" },
+        }),
+        makePhaseEntry({
+          phase: "implement",
+          session: { id: "sess1", provider: "claude" },
+        }),
       ],
     });
 
@@ -212,7 +224,10 @@ describe("useSessionLogs", () => {
     const ticket = makeTicket({
       worktree: "/projects/foo",
       phaseHistory: [
-        makePhaseEntry({ phase: "implement", sessionId: "sess1" }),
+        makePhaseEntry({
+          phase: "implement",
+          session: { id: "sess1", provider: "claude" },
+        }),
       ],
     });
 
@@ -226,9 +241,15 @@ describe("useSessionLogs", () => {
     unmount();
   });
 
-  it("returns empty array when phaseHistory has no sessionId entries", () => {
+  it("returns empty array when phaseHistory has no Claude session entries", () => {
     const ticket = makeTicket({
-      phaseHistory: [makePhaseEntry({ phase: "setup" })],
+      phaseHistory: [
+        makePhaseEntry({ phase: "setup" }),
+        makePhaseEntry({
+          phase: "verify",
+          session: { id: "codex-1", provider: "codex" },
+        }),
+      ],
     });
 
     const captured: number[] = [];
@@ -255,7 +276,10 @@ describe("useSessionLogs", () => {
     const ticket = makeTicket({
       worktree: "/projects/foo",
       phaseHistory: [
-        makePhaseEntry({ phase: "implement", sessionId: "sess1" }),
+        makePhaseEntry({
+          phase: "implement",
+          session: { id: "sess1", provider: "claude" },
+        }),
       ],
     });
 

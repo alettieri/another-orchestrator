@@ -1,8 +1,4 @@
-import {
-  type AgentConfig,
-  type AgentSession,
-  AgentSessionSchema,
-} from "../core/types.js";
+import type { AgentConfig, AgentSession } from "../core/types.js";
 import { execCommandStreaming } from "../utils/shell.js";
 
 export interface AgentInvocation {
@@ -17,13 +13,11 @@ export interface AgentResult {
   stderr: string;
   exitCode: number;
   success: boolean;
-  sessionId?: string;
   session?: AgentSession;
 }
 
 export interface AgentCallbacks {
   onOutput?: (chunk: string) => void;
-  onSessionId?: (sessionId: string) => void | Promise<void>;
   onSession?: (session: AgentSession) => void | Promise<void>;
 }
 
@@ -62,11 +56,9 @@ export function buildAgentArgs(
 }
 
 export function createClaudeStreamParser(options?: {
-  onSessionId?: (sessionId: string) => void | Promise<void>;
   onSession?: (session: AgentSession) => void | Promise<void>;
 }) {
   let buffer = "";
-  let sessionId: string | undefined;
   let session: AgentSession | undefined;
   let finalText: string | undefined;
 
@@ -85,14 +77,12 @@ export function createClaudeStreamParser(options?: {
     const e = event as Record<string, unknown>;
 
     if (
-      sessionId === undefined &&
+      session === undefined &&
       e.type === "system" &&
       e.subtype === "init" &&
       typeof e.session_id === "string"
     ) {
-      sessionId = e.session_id;
-      session = AgentSessionSchema.parse({ id: sessionId });
-      void options?.onSessionId?.(sessionId);
+      session = { id: e.session_id, provider: "claude" };
       void options?.onSession?.(session);
       return;
     }
@@ -119,7 +109,7 @@ export function createClaudeStreamParser(options?: {
       }
     },
     get sessionId() {
-      return sessionId;
+      return session?.id;
     },
     get session() {
       return session;
@@ -140,7 +130,6 @@ export async function invokeAgent(
 
   if (agentConfig.command === "claude") {
     const parser = createClaudeStreamParser({
-      onSessionId: callbacks?.onSessionId,
       onSession: callbacks?.onSession,
     });
 
@@ -161,7 +150,6 @@ export async function invokeAgent(
       stderr: result.stderr,
       exitCode: result.exitCode,
       success: result.exitCode === 0,
-      sessionId: parser.sessionId,
       session: parser.session,
     };
   }

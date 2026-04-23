@@ -20,7 +20,6 @@ export interface PhaseResult {
   captured: Record<string, string>;
   nextPhase: string | null;
   pending?: boolean;
-  sessionId?: string;
   session?: AgentSession;
 }
 
@@ -127,6 +126,20 @@ export function createPhaseExecutor(
     log: Logger,
     signal?: AbortSignal,
   ): Promise<PhaseResult> {
+    const persistSessionUpdate = async (
+      update: Partial<Pick<TicketState, "currentSession">>,
+      fieldName: "currentSession",
+    ) => {
+      if (!stateManager) return;
+
+      try {
+        await stateManager.updateTicket(ticket.planId, ticket.ticketId, update);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        log.warn(`Failed to persist ${fieldName}: ${msg}`);
+      }
+    };
+
     if (!phase.promptTemplate) {
       return {
         success: false,
@@ -159,28 +172,8 @@ export function createPhaseExecutor(
       },
       {
         onOutput: (chunk) => log.trace(chunk),
-        onSessionId: async (sessionId) => {
-          if (!stateManager) return;
-          try {
-            await stateManager.updateTicket(ticket.planId, ticket.ticketId, {
-              currentSessionId: sessionId,
-            });
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            log.warn(`Failed to persist currentSessionId: ${msg}`);
-          }
-        },
-        onSession: async (session) => {
-          if (!stateManager) return;
-          try {
-            await stateManager.updateTicket(ticket.planId, ticket.ticketId, {
-              currentSession: session,
-            });
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            log.warn(`Failed to persist currentSession: ${msg}`);
-          }
-        },
+        onSession: async (session) =>
+          persistSessionUpdate({ currentSession: session }, "currentSession"),
       },
       { signal },
     );
@@ -193,7 +186,6 @@ export function createPhaseExecutor(
       output: agentResult.stdout,
       captured,
       nextPhase,
-      sessionId: agentResult.sessionId,
       session: agentResult.session,
     };
   }
