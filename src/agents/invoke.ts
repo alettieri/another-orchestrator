@@ -23,6 +23,13 @@ export interface AgentCallbacks {
 
 const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
 
+interface StreamParser {
+  feed(chunk: string): void;
+  end(): void;
+  readonly session: AgentSession | undefined;
+  readonly finalText: string | undefined;
+}
+
 export function buildAgentArgs(
   agentConfig: AgentConfig,
   invocation: AgentInvocation,
@@ -46,7 +53,7 @@ export function buildAgentArgs(
   }
 
   if (command === "codex") {
-    const args = ["exec", prompt, ...defaultArgs];
+    const args = ["exec", "--json", prompt, ...defaultArgs];
     return { command, args };
   }
 
@@ -58,9 +65,79 @@ export function buildAgentArgs(
 export function createClaudeStreamParser(options?: {
   onSession?: (session: AgentSession) => void | Promise<void>;
 }) {
-  let buffer = "";
   let session: AgentSession | undefined;
   let finalText: string | undefined;
+
+  return createJsonLineStreamParser(
+    (event) => {
+      if (
+        session === undefined &&
+        event.type === "system" &&
+        event.subtype === "init" &&
+        typeof event.session_id === "string"
+      ) {
+        session = { id: event.session_id, provider: "claude" };
+        void options?.onSession?.(session);
+        return;
+      }
+
+      if (event.type === "result" && typeof event.result === "string") {
+        finalText = event.result;
+      }
+    },
+    {
+      get session() {
+        return session;
+      },
+      get finalText() {
+        return finalText;
+      },
+    },
+  );
+}
+
+export function createCodexStreamParser(options?: {
+  onSession?: (session: AgentSession) => void | Promise<void>;
+}) {
+  let session: AgentSession | undefined;
+  let finalText: string | undefined;
+
+  return createJsonLineStreamParser(
+    (event) => {
+      if (
+        session === undefined &&
+        event.type === "thread.started" &&
+        typeof event.thread_id === "string"
+      ) {
+        session = { id: event.thread_id, provider: "codex" };
+        void options?.onSession?.(session);
+        return;
+      }
+
+      if (event.type !== "item.completed") return;
+      if (!event.item || typeof event.item !== "object") return;
+
+      const item = event.item as Record<string, unknown>;
+      if (item.type === "agent_message" && typeof item.text === "string") {
+        finalText = item.text;
+      }
+    },
+    {
+      get session() {
+        return session;
+      },
+      get finalText() {
+        return finalText;
+      },
+    },
+  );
+}
+
+function createJsonLineStreamParser(
+  onEvent: (event: Record<string, unknown>) => void,
+  state: Pick<StreamParser, "session" | "finalText">,
+): StreamParser {
+  let buffer = "";
 
   function handleLine(line: string): void {
     const trimmed = line.trim();
@@ -74,22 +151,7 @@ export function createClaudeStreamParser(options?: {
     }
 
     if (!event || typeof event !== "object") return;
-    const e = event as Record<string, unknown>;
-
-    if (
-      session === undefined &&
-      e.type === "system" &&
-      e.subtype === "init" &&
-      typeof e.session_id === "string"
-    ) {
-      session = { id: e.session_id, provider: "claude" };
-      void options?.onSession?.(session);
-      return;
-    }
-
-    if (e.type === "result" && typeof e.result === "string") {
-      finalText = e.result;
-    }
+    onEvent(event as Record<string, unknown>);
   }
 
   return {
@@ -108,14 +170,11 @@ export function createClaudeStreamParser(options?: {
         buffer = "";
       }
     },
-    get sessionId() {
-      return session?.id;
-    },
     get session() {
-      return session;
+      return state.session;
     },
     get finalText() {
-      return finalText;
+      return state.finalText;
     },
   };
 }
@@ -127,44 +186,40 @@ export async function invokeAgent(
   options?: { signal?: AbortSignal },
 ): Promise<AgentResult> {
   const { command, args } = buildAgentArgs(agentConfig, invocation);
-
-  if (agentConfig.command === "claude") {
-    const parser = createClaudeStreamParser({
-      onSession: callbacks?.onSession,
-    });
-
-    const result = await execCommandStreaming(command, args, {
-      cwd: invocation.cwd || undefined,
-      timeoutMs: invocation.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      onStdout: (chunk) => {
-        callbacks?.onOutput?.(chunk);
-        parser.feed(chunk);
-      },
-      signal: options?.signal,
-    });
-
-    parser.end();
-
-    return {
-      stdout: parser.finalText ?? result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-      success: result.exitCode === 0,
-      session: parser.session,
-    };
-  }
+  const parser =
+    agentConfig.command === "claude"
+      ? createClaudeStreamParser({ onSession: callbacks?.onSession })
+      : agentConfig.command === "codex"
+        ? createCodexStreamParser({ onSession: callbacks?.onSession })
+        : undefined;
 
   const result = await execCommandStreaming(command, args, {
     cwd: invocation.cwd || undefined,
     timeoutMs: invocation.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-    onStdout: callbacks?.onOutput,
+    onStdout: parser
+      ? (chunk) => {
+          callbacks?.onOutput?.(chunk);
+          parser.feed(chunk);
+        }
+      : callbacks?.onOutput,
     signal: options?.signal,
   });
 
+  parser?.end();
+
+  if (
+    agentConfig.command === "codex" &&
+    result.exitCode === 0 &&
+    parser?.session === undefined
+  ) {
+    console.warn("Codex completed successfully without emitting a thread_id");
+  }
+
   return {
-    stdout: result.stdout,
+    stdout: parser?.finalText ?? result.stdout,
     stderr: result.stderr,
     exitCode: result.exitCode,
     success: result.exitCode === 0,
+    session: parser?.session,
   };
 }
