@@ -7,7 +7,11 @@ import { createPhaseExecutor } from "../phases/executor.js";
 import { createLogger } from "../utils/logger.js";
 import { createStateManager } from "./state.js";
 import { createTemplateRenderer } from "./template.js";
-import type { OrchestratorConfig, TicketState } from "./types.js";
+import type {
+  OrchestratorConfig,
+  PhaseHistoryEntry,
+  TicketState,
+} from "./types.js";
 import { createWorkflowLoader } from "./workflow.js";
 
 const execFile = promisify(execFileCallback);
@@ -188,6 +192,35 @@ export function createRunner(
   }
   const inFlight = new Map<string, InFlightEntry>();
 
+  async function resolveSessionState(
+    ticket: TicketState,
+    overrides: {
+      sessionId?: string;
+      session?: TicketState["currentSession"];
+    } = {},
+  ): Promise<
+    Pick<TicketState, "currentSessionId" | "currentSession"> & {
+      historySessionId?: string;
+      historySession?: NonNullable<TicketState["currentSession"]>;
+    }
+  > {
+    const persisted =
+      (await stateManager.getTicket(ticket.planId, ticket.ticketId)) ?? ticket;
+
+    const historySessionId =
+      overrides.sessionId ?? persisted.currentSessionId ?? undefined;
+    const historySession:
+      | NonNullable<TicketState["currentSession"]>
+      | undefined = overrides.session ?? persisted.currentSession ?? undefined;
+
+    return {
+      currentSessionId: null,
+      currentSession: null,
+      historySessionId,
+      historySession,
+    };
+  }
+
   async function executeTicketPhase(
     ticket: TicketState,
     signal?: AbortSignal,
@@ -240,12 +273,15 @@ export function createRunner(
       log.error(`Phase "${ticket.currentPhase}" failed: ${errorMsg}`);
 
       const completedAt = new Date().toISOString();
-      const historyEntry = {
+      const sessionState = await resolveSessionState(ticket);
+      const historyEntry: PhaseHistoryEntry = {
         phase: ticket.currentPhase,
         status: "failure" as const,
         startedAt,
         completedAt,
         output: errorMsg,
+        sessionId: sessionState.historySessionId,
+        session: sessionState.historySession,
       };
 
       const updated = await stateManager.updateTicket(
@@ -255,7 +291,7 @@ export function createRunner(
           status: "failed",
           error: errorMsg,
           phaseHistory: [...ticket.phaseHistory, historyEntry],
-          currentSessionId: null,
+          ...sessionState,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -337,14 +373,19 @@ export function createRunner(
       );
     }
 
-    const historyEntry = {
+    const historyEntry: PhaseHistoryEntry = {
       phase: ticket.currentPhase,
       status: (result.success ? "success" : "failure") as "success" | "failure",
       startedAt,
       completedAt,
       output: result.output.slice(0, 4096),
-      sessionId: result.sessionId,
     };
+    const sessionState = await resolveSessionState(ticket, {
+      sessionId: result.sessionId,
+      session: result.session,
+    });
+    historyEntry.sessionId = sessionState.historySessionId;
+    historyEntry.session = sessionState.historySession;
 
     // Merge captured values into context
     const newContext = { ...ticket.context, ...result.captured };
@@ -371,7 +412,7 @@ export function createRunner(
           phaseHistory: [...ticket.phaseHistory, historyEntry],
           context: newContext,
           error: null,
-          currentSessionId: null,
+          ...sessionState,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -392,7 +433,7 @@ export function createRunner(
           context: newContext,
           retries: newRetries,
           error: null,
-          currentSessionId: null,
+          ...sessionState,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -409,7 +450,7 @@ export function createRunner(
           phaseHistory: [...ticket.phaseHistory, historyEntry],
           context: newContext,
           error: null,
-          currentSessionId: null,
+          ...sessionState,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -424,7 +465,7 @@ export function createRunner(
         phaseHistory: [...ticket.phaseHistory, historyEntry],
         context: newContext,
         error: result.success ? null : "Phase failed without a next phase",
-        currentSessionId: null,
+        ...sessionState,
       },
     );
     return { ticket: updated, pendingPoll: false };
