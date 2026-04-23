@@ -198,7 +198,7 @@ export function createRunner(
       session?: TicketState["currentSession"];
     } = {},
   ): Promise<
-    Pick<TicketState, "currentSession"> & {
+    Pick<TicketState, "phaseHistory"> & {
       historySession?: NonNullable<TicketState["currentSession"]>;
     }
   > {
@@ -210,7 +210,7 @@ export function createRunner(
       | undefined = overrides.session ?? persisted.currentSession ?? undefined;
 
     return {
-      currentSession: null,
+      phaseHistory: persisted.phaseHistory,
       historySession,
     };
   }
@@ -244,6 +244,7 @@ export function createRunner(
         {
           status: "failed",
           error: `Phase "${ticket.currentPhase}" exceeded maxRetries (${phase.maxRetries})`,
+          currentSession: null,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -260,7 +261,19 @@ export function createRunner(
 
       // If aborted mid-phase, skip result processing
       if (signal?.aborted) {
-        return { ticket, pendingPoll: false };
+        const persisted =
+          (await stateManager.getTicket(ticket.planId, ticket.ticketId)) ??
+          ticket;
+        if (persisted.currentSession === null) {
+          return { ticket: persisted, pendingPoll: false };
+        }
+
+        const updated = await stateManager.updateTicket(
+          ticket.planId,
+          ticket.ticketId,
+          { currentSession: null },
+        );
+        return { ticket: updated, pendingPoll: false };
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -268,7 +281,6 @@ export function createRunner(
 
       const completedAt = new Date().toISOString();
       const sessionState = await resolveSessionState(ticket);
-      const { currentSession } = sessionState;
       const historyEntry: PhaseHistoryEntry = {
         phase: ticket.currentPhase,
         status: "failure",
@@ -286,8 +298,8 @@ export function createRunner(
         {
           status: "failed",
           error: errorMsg,
-          phaseHistory: [...ticket.phaseHistory, historyEntry],
-          currentSession,
+          phaseHistory: [...sessionState.phaseHistory, historyEntry],
+          currentSession: null,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -326,6 +338,7 @@ export function createRunner(
             error: "Poll timeout exceeded",
             phaseHistory: [...ticket.phaseHistory, historyEntry],
             context: newContext,
+            currentSession: null,
           },
         );
         return { ticket: updated, pendingPoll: false };
@@ -349,6 +362,7 @@ export function createRunner(
           status: "ready",
           context: newContext,
           error: null,
+          currentSession: null,
         },
       );
       return { ticket: updated, pendingPoll: true };
@@ -379,7 +393,6 @@ export function createRunner(
     const sessionState = await resolveSessionState(ticket, {
       session: result.session,
     });
-    const { currentSession } = sessionState;
     if (sessionState.historySession) {
       historyEntry.session = sessionState.historySession;
     }
@@ -406,10 +419,10 @@ export function createRunner(
         ticket.ticketId,
         {
           status: newStatus,
-          phaseHistory: [...ticket.phaseHistory, historyEntry],
+          phaseHistory: [...sessionState.phaseHistory, historyEntry],
           context: newContext,
           error: null,
-          currentSession,
+          currentSession: null,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -426,11 +439,11 @@ export function createRunner(
         ticket.ticketId,
         {
           status: "ready",
-          phaseHistory: [...ticket.phaseHistory, historyEntry],
+          phaseHistory: [...sessionState.phaseHistory, historyEntry],
           context: newContext,
           retries: newRetries,
           error: null,
-          currentSession,
+          currentSession: null,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -444,10 +457,10 @@ export function createRunner(
         {
           currentPhase: result.nextPhase,
           status: "ready",
-          phaseHistory: [...ticket.phaseHistory, historyEntry],
+          phaseHistory: [...sessionState.phaseHistory, historyEntry],
           context: newContext,
           error: null,
-          currentSession,
+          currentSession: null,
         },
       );
       return { ticket: updated, pendingPoll: false };
@@ -459,10 +472,10 @@ export function createRunner(
       ticket.ticketId,
       {
         status: result.success ? "complete" : "failed",
-        phaseHistory: [...ticket.phaseHistory, historyEntry],
+        phaseHistory: [...sessionState.phaseHistory, historyEntry],
         context: newContext,
         error: result.success ? null : "Phase failed without a next phase",
-        currentSession,
+        currentSession: null,
       },
     );
     return { ticket: updated, pendingPoll: false };

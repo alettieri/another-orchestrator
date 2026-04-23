@@ -160,6 +160,52 @@ phases:
     return JSON.parse(raw);
   }
 
+  async function writeAgentWorkflow(fileName: string, workflowYaml: string) {
+    await writeFile(join(workflowDir, `${fileName}.yaml`), workflowYaml);
+    await writeFile(join(promptDir, "agent.md"), "do the thing");
+  }
+
+  function mockAgentInvocation({
+    sessionId,
+    success,
+    output,
+  }: {
+    sessionId: string;
+    success: boolean;
+    output: string;
+  }) {
+    return vi
+      .spyOn(invokeModule, "invokeAgent")
+      .mockImplementation(async (_agentConfig, _invocation, callbacks) => {
+        await callbacks?.onSession?.({
+          id: sessionId,
+          provider: "claude",
+        });
+        return {
+          stdout: output,
+          stderr: "",
+          exitCode: success ? 0 : 1,
+          success,
+          session: {
+            id: sessionId,
+            provider: "claude",
+          },
+        };
+      });
+  }
+
+  async function runTicket(workflow: string): Promise<TicketState> {
+    const runner = createRunner(config);
+    const plan = makePlan({ workflow });
+    const ticket = makeTicket({
+      workflow,
+      currentPhase: "agent_phase",
+    });
+    await savePlan(plan);
+    await saveTicket(ticket);
+    return await runner.runSingleTicket("test-plan", "TICKET-1");
+  }
+
   it("flips plan to complete when the last ticket finishes via runSingleTicket", async () => {
     await writeFile(
       join(scriptDir, "run.sh"),
@@ -1170,6 +1216,126 @@ phases:
       status: "success",
       session: {
         id: "structured-session-id",
+        provider: "claude",
+      },
+    });
+
+    invokeSpy.mockRestore();
+  });
+
+  it("clears live session state and records history when an agent transitions to the next phase", async () => {
+    const transitionWorkflowYaml = `
+name: agent-transition-workflow
+description: "Agent workflow"
+phases:
+  - id: agent_phase
+    type: agent
+    promptTemplate: agent.md
+    onSuccess: poll_check
+    onFailure: abort
+  - id: poll_check
+    type: poll
+    command: wait.sh
+    intervalSeconds: 60
+    timeoutSeconds: 5
+    onSuccess: complete
+    onFailure: abort
+  - id: complete
+    type: terminal
+  - id: abort
+    type: terminal
+`;
+    await writeAgentWorkflow("agent-transition", transitionWorkflowYaml);
+    await writeFile(join(scriptDir, "wait.sh"), "#!/usr/bin/env bash\nexit 1", {
+      mode: 0o755,
+    });
+
+    const invokeSpy = mockAgentInvocation({
+      sessionId: "transition-session-id",
+      success: true,
+      output: "agent ok",
+    });
+    const result = await runTicket("agent-transition-workflow");
+
+    expect(result.status).toBe("ready");
+    expect(result.currentPhase).toBe("poll_check");
+    expect(result.currentSession).toBeNull();
+    expect(result.phaseHistory).toHaveLength(1);
+    expect(result.phaseHistory[0]).toMatchObject({
+      phase: "agent_phase",
+      status: "success",
+      session: {
+        id: "transition-session-id",
+        provider: "claude",
+      },
+    });
+
+    invokeSpy.mockRestore();
+  });
+
+  it("clears live session state and records history when an agent retries the same phase", async () => {
+    const retryWorkflowYaml = `
+name: agent-retry-workflow
+description: "Agent workflow"
+phases:
+  - id: agent_phase
+    type: agent
+    promptTemplate: agent.md
+    maxRetries: 0
+    onFailure: agent_phase
+`;
+    await writeAgentWorkflow("agent-retry", retryWorkflowYaml);
+
+    const invokeSpy = mockAgentInvocation({
+      sessionId: "retry-session-id",
+      success: false,
+      output: "agent failed",
+    });
+    const result = await runTicket("agent-retry-workflow");
+
+    expect(result.status).toBe("failed");
+    expect(result.currentPhase).toBe("agent_phase");
+    expect(result.currentSession).toBeNull();
+    expect(result.retries.agent_phase).toBe(1);
+    expect(result.phaseHistory).toHaveLength(1);
+    expect(result.phaseHistory[0]).toMatchObject({
+      phase: "agent_phase",
+      status: "failure",
+      session: {
+        id: "retry-session-id",
+        provider: "claude",
+      },
+    });
+
+    invokeSpy.mockRestore();
+  });
+
+  it("clears live session state and records history when an agent fails without a next phase", async () => {
+    const failureWorkflowYaml = `
+name: agent-failure-workflow
+description: "Agent workflow"
+phases:
+  - id: agent_phase
+    type: agent
+    promptTemplate: agent.md
+`;
+    await writeAgentWorkflow("agent-failure", failureWorkflowYaml);
+
+    const invokeSpy = mockAgentInvocation({
+      sessionId: "failure-session-id",
+      success: false,
+      output: "agent failed",
+    });
+    const result = await runTicket("agent-failure-workflow");
+
+    expect(result.status).toBe("failed");
+    expect(result.currentSession).toBeNull();
+    expect(result.phaseHistory).toHaveLength(1);
+    expect(result.phaseHistory[0]).toMatchObject({
+      phase: "agent_phase",
+      status: "failure",
+      session: {
+        id: "failure-session-id",
         provider: "claude",
       },
     });
