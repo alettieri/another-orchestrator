@@ -2,7 +2,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pino from "pino";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentResult } from "../agents/invoke.js";
+import * as invokeModule from "../agents/invoke.js";
 import { createTemplateRenderer } from "../core/template.js";
 import type {
   OrchestratorConfig,
@@ -373,6 +375,101 @@ describe("executor", () => {
 
       expect(result.success).toBe(false);
       expect(result.nextPhase).toBe("escalate");
+    });
+
+    it("returns structured session data alongside the legacy sessionId", async () => {
+      await writeFile(join(promptDir, "session.md"), "capture session");
+
+      const invokeSpy = vi
+        .spyOn(invokeModule, "invokeAgent")
+        .mockResolvedValue({
+          stdout: "ok",
+          stderr: "",
+          exitCode: 0,
+          success: true,
+          sessionId: "legacy-session-id",
+          session: { id: "structured-session-id" },
+        } satisfies AgentResult);
+
+      const phase: PhaseDefinition = {
+        id: "agent_phase",
+        type: "agent",
+        promptTemplate: "session.md",
+        agent: "claude",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+        onSuccess: "done",
+        onFailure: "fail",
+      };
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger);
+      const result = await executor.execute(phase, makeTicket(), null);
+
+      expect(result.sessionId).toBe("legacy-session-id");
+      expect(result.session).toEqual({ id: "structured-session-id" });
+
+      invokeSpy.mockRestore();
+    });
+
+    it("persists structured currentSession during agent execution", async () => {
+      await writeFile(join(promptDir, "session.md"), "capture session");
+
+      const updateTicket = vi.fn().mockResolvedValue(makeTicket());
+      const invokeSpy = vi
+        .spyOn(invokeModule, "invokeAgent")
+        .mockImplementation(async (_agentConfig, _invocation, callbacks) => {
+          await callbacks?.onSessionId?.("legacy-session-id");
+          await callbacks?.onSession?.({ id: "structured-session-id" });
+
+          return {
+            stdout: "ok",
+            stderr: "",
+            exitCode: 0,
+            success: true,
+            sessionId: "legacy-session-id",
+            session: { id: "structured-session-id" },
+          };
+        });
+
+      const phase: PhaseDefinition = {
+        id: "agent_phase",
+        type: "agent",
+        promptTemplate: "session.md",
+        agent: "claude",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+        onSuccess: "done",
+        onFailure: "fail",
+      };
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger, {
+        listPlans: vi.fn(),
+        getPlan: vi.fn(),
+        savePlan: vi.fn(),
+        listTickets: vi.fn(),
+        getTicket: vi.fn(),
+        saveTicket: vi.fn(),
+        updateTicket,
+        getReadyTickets: vi.fn(),
+        getRunningCount: vi.fn(),
+        resolveDependencies: vi.fn(),
+        maybeMarkPlanComplete: vi.fn(),
+      });
+
+      await executor.execute(phase, makeTicket(), null);
+
+      expect(updateTicket).toHaveBeenCalledWith("plan-1", "TICKET-1", {
+        currentSessionId: "legacy-session-id",
+      });
+      expect(updateTicket).toHaveBeenCalledWith("plan-1", "TICKET-1", {
+        currentSession: { id: "structured-session-id" },
+      });
+
+      invokeSpy.mockRestore();
     });
   });
 

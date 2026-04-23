@@ -5,6 +5,7 @@ import { resolveAgent } from "../core/config.js";
 import type { StateManager } from "../core/state.js";
 import type { TemplateRenderer } from "../core/template.js";
 import {
+  type AgentSession,
   type OrchestratorConfig,
   type PhaseDefinition,
   PhaseTypeSchema,
@@ -20,6 +21,7 @@ export interface PhaseResult {
   nextPhase: string | null;
   pending?: boolean;
   sessionId?: string;
+  session?: AgentSession;
 }
 
 export interface PhaseExecutor {
@@ -168,6 +170,17 @@ export function createPhaseExecutor(
             log.warn(`Failed to persist currentSessionId: ${msg}`);
           }
         },
+        onSession: async (session) => {
+          if (!stateManager) return;
+          try {
+            await stateManager.updateTicket(ticket.planId, ticket.ticketId, {
+              currentSession: session,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn(`Failed to persist currentSession: ${msg}`);
+          }
+        },
       },
       { signal },
     );
@@ -181,6 +194,7 @@ export function createPhaseExecutor(
       captured,
       nextPhase,
       sessionId: agentResult.sessionId,
+      session: agentResult.session,
     };
   }
 

@@ -5,6 +5,34 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createStateManager } from "./state.js";
 import type { PlanFile, TicketState } from "./types.js";
 
+const STRUCTURED_SESSION_TICKET = {
+  currentSessionId: "legacy-current-session",
+  currentSession: { id: "structured-current-session" },
+  phaseHistory: [
+    {
+      phase: "implement",
+      status: "success" as const,
+      startedAt: "2025-01-01T00:00:00Z",
+      completedAt: "2025-01-01T00:05:00Z",
+      sessionId: "legacy-phase-session",
+      session: { id: "structured-phase-session" },
+    },
+  ],
+};
+
+const LEGACY_SESSION_TICKET = {
+  currentSessionId: "legacy-current-session",
+  phaseHistory: [
+    {
+      phase: "implement",
+      status: "success" as const,
+      startedAt: "2025-01-01T00:00:00Z",
+      completedAt: "2025-01-01T00:05:00Z",
+      sessionId: "legacy-phase-session",
+    },
+  ],
+};
+
 function makePlan(overrides: Partial<PlanFile> = {}): PlanFile {
   return {
     id: "plan-1",
@@ -144,20 +172,7 @@ describe("StateManager", () => {
     it("persists structured session fields alongside legacy compatibility fields", async () => {
       const sm = createStateManager(stateDir);
       await sm.savePlan(makePlan());
-      const ticket = makeTicket({
-        currentSessionId: "legacy-current-session",
-        currentSession: { id: "structured-current-session" },
-        phaseHistory: [
-          {
-            phase: "implement",
-            status: "success",
-            startedAt: "2025-01-01T00:00:00Z",
-            completedAt: "2025-01-01T00:05:00Z",
-            sessionId: "legacy-phase-session",
-            session: { id: "structured-phase-session" },
-          },
-        ],
-      });
+      const ticket = makeTicket(STRUCTURED_SESSION_TICKET);
       await sm.saveTicket(ticket);
 
       const retrieved = await sm.getTicket("plan-1", "t-1");
@@ -167,18 +182,7 @@ describe("StateManager", () => {
     it("reads legacy-only session fields without requiring structured session data", async () => {
       const sm = createStateManager(stateDir);
       await sm.savePlan(makePlan());
-      const ticket = makeTicket({
-        currentSessionId: "legacy-current-session",
-        phaseHistory: [
-          {
-            phase: "implement",
-            status: "success",
-            startedAt: "2025-01-01T00:00:00Z",
-            completedAt: "2025-01-01T00:05:00Z",
-            sessionId: "legacy-phase-session",
-          },
-        ],
-      });
+      const ticket = makeTicket(LEGACY_SESSION_TICKET);
       await sm.saveTicket(ticket);
 
       const retrieved = await sm.getTicket("plan-1", "t-1");
