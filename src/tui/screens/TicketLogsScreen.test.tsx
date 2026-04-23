@@ -4,10 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TicketState } from "../../core/types.js";
 import {
   buildLogLines,
+  type ClaudeSession,
   inlineInput,
   type LogEvent,
   parseSessionJsonl,
-  resolveSessionPath,
+  resolveClaudeSessionPath,
 } from "./TicketLogsScreen.helpers.js";
 import { TicketLogsScreen } from "./TicketLogsScreen.js";
 
@@ -44,28 +45,39 @@ function makeTicket({
   };
 }
 
-// ─── resolveSessionPath ───────────────────────────────────────────────────────
+const claudeSession: ClaudeSession = { id: "abc123", provider: "claude" };
 
-describe("resolveSessionPath", () => {
+// ─── resolveClaudeSessionPath ────────────────────────────────────────────────
+
+describe("resolveClaudeSessionPath", () => {
   it("builds path under ~/.claude/projects", () => {
-    const result = resolveSessionPath("/tmp/wt", "abc123");
+    const result = resolveClaudeSessionPath("/tmp/wt", claudeSession);
     expect(result).toBe(
       `${os.homedir()}/.claude/projects/-tmp-wt/abc123.jsonl`,
     );
   });
 
   it("expands ~ to os.homedir()", () => {
-    const result = resolveSessionPath("/any/path", "sess");
+    const result = resolveClaudeSessionPath("/any/path", {
+      id: "sess",
+      provider: "claude",
+    });
     expect(result.startsWith(os.homedir())).toBe(true);
   });
 
   it("converts slashes to dashes in worktree path", () => {
-    const result = resolveSessionPath("/users/foo/bar", "sid");
+    const result = resolveClaudeSessionPath("/users/foo/bar", {
+      id: "sid",
+      provider: "claude",
+    });
     expect(result).toContain("-users-foo-bar");
   });
 
   it("appends sessionId with .jsonl extension", () => {
-    const result = resolveSessionPath("/tmp", "my-session-id");
+    const result = resolveClaudeSessionPath("/tmp", {
+      id: "my-session-id",
+      provider: "claude",
+    });
     expect(result.endsWith("/my-session-id.jsonl")).toBe(true);
   });
 });
@@ -184,14 +196,14 @@ describe("buildLogLines", () => {
 
   it("renders phase-divider as divider + blank", () => {
     const events: LogEvent[] = [
-      { type: "phase-divider", phase: "implement", sessionId: "abc123" },
+      { type: "phase-divider", phase: "implement", session: claudeSession },
     ];
     const lines = buildLogLines(events, 80);
     expect(lines).toHaveLength(2);
     expect(lines[0]).toEqual({
       type: "divider",
       phase: "implement",
-      sessionId: "abc123",
+      session: claudeSession,
     });
     expect(lines[1]).toEqual({ type: "blank" });
   });
@@ -356,7 +368,11 @@ describe("TicketLogsScreen", () => {
 
   it("renders divider line for phase-divider event", () => {
     const events: LogEvent[] = [
-      { type: "phase-divider", phase: "implement", sessionId: "abcdef12" },
+      {
+        type: "phase-divider",
+        phase: "implement",
+        session: { id: "abcdef12", provider: "claude" },
+      },
     ];
     mockUseSessionLogs.mockReturnValue(events);
 
@@ -364,7 +380,7 @@ describe("TicketLogsScreen", () => {
     const frame = lastFrame() ?? "";
 
     expect(frame).toContain("implement");
-    expect(frame).toContain("abcdef12".slice(0, 8));
+    expect(frame).toContain("claude:abcdef12".slice(0, 15));
     unmount();
   });
 

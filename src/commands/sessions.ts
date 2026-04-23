@@ -4,16 +4,22 @@ import { spawnInteractive } from "../agents/interactive.js";
 import type { LoadConfigOptions } from "../core/config.js";
 import { loadConfig } from "../core/config.js";
 import { createStateManager } from "../core/state.js";
-import type { PhaseHistoryEntry, TicketState } from "../core/types.js";
+import type {
+  AgentSession,
+  PhaseHistoryEntry,
+  TicketState,
+} from "../core/types.js";
 
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+type ClaudeSession = AgentSession & { provider: "claude" };
+type ClaudeSessionHistoryEntry = PhaseHistoryEntry & { session: ClaudeSession };
 
 function getClaudeSessions(
   ticket: TicketState,
   phase?: string,
-): PhaseHistoryEntry[] {
+): ClaudeSessionHistoryEntry[] {
   let sessions = ticket.phaseHistory.filter(
-    (h) => h.session?.provider === "claude",
+    (h): h is ClaudeSessionHistoryEntry => h.session?.provider === "claude",
   );
   if (phase) {
     sessions = sessions.filter((h) => h.phase === phase);
@@ -61,7 +67,7 @@ export function register(
             status: s.status,
             startedAt: s.startedAt,
             completedAt: s.completedAt,
-            sessionId: s.session?.id,
+            session: s.session,
           }));
           console.log(JSON.stringify(output, null, 2));
           return;
@@ -74,7 +80,7 @@ export function register(
               ? chalk.green(s.status)
               : chalk.red(s.status);
           console.log(
-            `${i + 1}. ${chalk.cyan(s.phase)} ${statusColor} ${chalk.dim(s.startedAt)} ${chalk.yellow(s.session?.id ?? "")}`,
+            `${i + 1}. ${chalk.cyan(s.phase)} ${statusColor} ${chalk.dim(s.startedAt)} ${chalk.yellow(s.session.id)}`,
           );
         }
 
@@ -90,7 +96,10 @@ export function register(
     .description("Resume a Claude session interactively")
     .argument("<planId>", "Plan ID")
     .argument("<ticketId>", "Ticket ID")
-    .argument("[sessionId]", "Session ID to resume (defaults to most recent)")
+    .argument(
+      "[sessionId]",
+      "Claude session ID to resume (defaults to most recent)",
+    )
     .option(
       "--phase <phase>",
       "Pick the most recent session from a specific phase",
@@ -117,13 +126,13 @@ export function register(
         if (!sessionId) {
           const sessions = getClaudeSessions(ticket, opts.phase);
           const latest = sessions[sessions.length - 1];
-          sessionId = latest?.session?.id;
+          sessionId = latest?.session.id;
         }
 
         if (!sessionId) {
           console.error(
             chalk.red(
-              "No session ID found. Provide one explicitly or check the ticket has Claude sessions.",
+              "No Claude session ID found. Provide one explicitly or check the ticket has Claude sessions.",
             ),
           );
           process.exitCode = 1;

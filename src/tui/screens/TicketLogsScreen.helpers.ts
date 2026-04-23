@@ -1,24 +1,27 @@
 import os from "node:os";
+import type { AgentSession } from "../../core/types.js";
 import { wrapText } from "./TicketDetailsScreen.helpers.js";
 
+export type ClaudeSession = AgentSession & { provider: "claude" };
+
 export type LogEvent =
-  | { type: "phase-divider"; phase: string; sessionId: string }
+  | { type: "phase-divider"; phase: string; session: ClaudeSession }
   | { type: "assistant-text"; text: string }
   | { type: "tool-use"; name: string; input: unknown };
 
 export type LogLine =
-  | { type: "divider"; phase: string; sessionId: string }
+  | { type: "divider"; phase: string; session: ClaudeSession }
   | { type: "text"; text: string }
   | { type: "tool"; name: string; summary: string }
   | { type: "blank" };
 
-export function resolveSessionPath(
+export function resolveClaudeSessionPath(
   worktree: string,
-  sessionId: string,
+  session: ClaudeSession,
 ): string {
   const sanitized = worktree.replaceAll("/", "-");
   const home = os.homedir();
-  return `${home}/.claude/projects/${sanitized}/${sessionId}.jsonl`;
+  return `${home}/.claude/projects/${sanitized}/${session.id}.jsonl`;
 }
 
 export function parseSessionJsonl(content: string): LogEvent[] {
@@ -95,7 +98,7 @@ export function buildLogLines(events: LogEvent[], width: number): LogLine[] {
       lines.push({
         type: "divider",
         phase: event.phase,
-        sessionId: event.sessionId,
+        session: event.session,
       });
       lines.push({ type: "blank" });
     } else if (event.type === "assistant-text") {
