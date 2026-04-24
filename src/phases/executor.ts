@@ -132,6 +132,7 @@ export function createPhaseExecutor(
   ): Promise<PhaseResult> {
     let sessionLogWriter: SessionLogWriter | undefined;
     let sessionLogWrites: Promise<void> = Promise.resolve();
+    let pendingSessionPersist: Promise<void> = Promise.resolve();
 
     const persistSessionUpdate = async (
       update: Partial<Pick<TicketState, "currentSession">>,
@@ -186,10 +187,11 @@ export function createPhaseExecutor(
             ticketId: ticket.ticketId,
             session,
           });
-          return persistSessionUpdate(
+          pendingSessionPersist = persistSessionUpdate(
             { currentSession: session },
             "currentSession",
           );
+          return pendingSessionPersist;
         },
         onSessionLogEvent: (event) => {
           const writer = sessionLogWriter;
@@ -203,6 +205,7 @@ export function createPhaseExecutor(
       { signal },
     );
 
+    await pendingSessionPersist;
     await sessionLogWrites;
 
     const captured = await captureValues(phase, agentResult.stdout, ticket);
