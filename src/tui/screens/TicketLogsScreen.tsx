@@ -38,6 +38,8 @@ export function TicketLogsScreen({
   }, [pinned, totalLines, maxOffset]);
 
   useInput((_input, key) => {
+    if (totalLines === 0) return;
+
     const isUpward =
       key.upArrow || _input === "k" || key.pageUp || _input === "g";
 
@@ -78,6 +80,10 @@ export function TicketLogsScreen({
     }
   });
 
+  if (totalLines === 0) {
+    return <Text dimColor>No session logs yet.</Text>;
+  }
+
   const visibleLines = allLines.slice(
     scrollOffset,
     scrollOffset + effectiveViewport,
@@ -116,6 +122,16 @@ function LogLineRow({ line }: { line: LogLine }): React.ReactElement {
       <Box>
         <Text color="cyan">{`▸ ${line.name}`}</Text>
         <Text dimColor>{` ${line.summary}`}</Text>
+      </Box>
+    );
+  }
+  if (line.type === "tool-result") {
+    return (
+      <Box>
+        <Text color={line.isError ? "red" : "green"}>
+          {line.isError ? "✗" : "✓"}
+        </Text>
+        <Text dimColor>{` ${line.name}`}</Text>
       </Box>
     );
   }

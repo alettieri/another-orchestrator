@@ -1,14 +1,11 @@
-import os from "node:os";
 import { render } from "ink-testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TicketState } from "../../core/types.js";
 import {
   buildLogLines,
-  type ClaudeSession,
   inlineInput,
   type LogEvent,
-  parseSessionJsonl,
-  resolveClaudeSessionPath,
+  parseNormalizedSessionJsonl,
 } from "./TicketLogsScreen.helpers.js";
 import { TicketLogsScreen } from "./TicketLogsScreen.js";
 
@@ -45,149 +42,132 @@ function makeTicket({
   };
 }
 
-const claudeSession: ClaudeSession = { id: "abc123", provider: "claude" };
-
-// ─── resolveClaudeSessionPath ────────────────────────────────────────────────
-
-describe("resolveClaudeSessionPath", () => {
-  it("builds path under ~/.claude/projects", () => {
-    const result = resolveClaudeSessionPath("/tmp/wt", claudeSession);
-    expect(result).toBe(
-      `${os.homedir()}/.claude/projects/-tmp-wt/abc123.jsonl`,
-    );
+function makeNormalizedLine(type: string, extra: Record<string, unknown>) {
+  return JSON.stringify({
+    v: 1,
+    timestamp: "2024-01-01T00:00:00Z",
+    type,
+    ...extra,
   });
+}
 
-  it("expands ~ to os.homedir()", () => {
-    const result = resolveClaudeSessionPath("/any/path", {
-      id: "sess",
-      provider: "claude",
-    });
-    expect(result.startsWith(os.homedir())).toBe(true);
-  });
+const claudeSession = { id: "abc123", provider: "claude" as const };
 
-  it("converts slashes to dashes in worktree path", () => {
-    const result = resolveClaudeSessionPath("/users/foo/bar", {
-      id: "sid",
-      provider: "claude",
-    });
-    expect(result).toContain("-users-foo-bar");
-  });
+// ─── parseNormalizedSessionJsonl ──────────────────────────────────────────────
 
-  it("appends sessionId with .jsonl extension", () => {
-    const result = resolveClaudeSessionPath("/tmp", {
-      id: "my-session-id",
-      provider: "claude",
-    });
-    expect(result.endsWith("/my-session-id.jsonl")).toBe(true);
-  });
-});
-
-// ─── parseSessionJsonl ────────────────────────────────────────────────────────
-
-describe("parseSessionJsonl", () => {
+describe("parseNormalizedSessionJsonl", () => {
   it("returns empty array for empty string", () => {
-    expect(parseSessionJsonl("")).toEqual([]);
+    expect(parseNormalizedSessionJsonl("")).toEqual([]);
   });
 
-  it("extracts assistant-text events from assistant messages", () => {
-    const line = JSON.stringify({
-      type: "assistant",
-      message: {
-        content: [{ type: "text", text: "Hello world" }],
-      },
-    });
-    const events = parseSessionJsonl(line);
-    expect(events).toEqual([{ type: "assistant-text", text: "Hello world" }]);
+  it("extracts assistant-text events", () => {
+    const line = makeNormalizedLine("assistant-text", { text: "Hello world" });
+    expect(parseNormalizedSessionJsonl(line)).toEqual([
+      { type: "assistant-text", text: "Hello world" },
+    ]);
   });
 
-  it("extracts tool-use events from assistant messages", () => {
-    const line = JSON.stringify({
-      type: "assistant",
-      message: {
-        content: [
-          { type: "tool_use", name: "Read", input: { file_path: "/foo.ts" } },
-        ],
-      },
+  it("extracts tool-use events with toolName mapped to name", () => {
+    const line = makeNormalizedLine("tool-use", {
+      callId: "c1",
+      toolName: "Read",
+      input: { file_path: "/foo.ts" },
     });
-    const events = parseSessionJsonl(line);
-    expect(events).toEqual([
+    expect(parseNormalizedSessionJsonl(line)).toEqual([
       { type: "tool-use", name: "Read", input: { file_path: "/foo.ts" } },
     ]);
   });
 
-  it("skips non-assistant message types", () => {
-    const lines = [
-      JSON.stringify({
-        type: "user",
-        message: { content: [{ type: "text", text: "hi" }] },
-      }),
-      JSON.stringify({ type: "system", content: "system prompt" }),
-      JSON.stringify({ type: "result", output: "done" }),
-    ].join("\n");
-    expect(parseSessionJsonl(lines)).toEqual([]);
+  it("extracts tool-result events", () => {
+    const line = makeNormalizedLine("tool-result", {
+      callId: "c1",
+      toolName: "Read",
+      result: "file contents",
+      isError: false,
+    });
+    expect(parseNormalizedSessionJsonl(line)).toEqual([
+      { type: "tool-result", callId: "c1", name: "Read", isError: false },
+    ]);
   });
 
-  it("skips thinking and image blocks within assistant messages", () => {
-    const line = JSON.stringify({
-      type: "assistant",
-      message: {
-        content: [
-          { type: "thinking", thinking: "let me think" },
-          { type: "text", text: "answer" },
-          { type: "image", source: {} },
-        ],
-      },
+  it("defaults tool-result isError to false when absent", () => {
+    const line = makeNormalizedLine("tool-result", {
+      callId: "c2",
+      toolName: "Write",
+      result: null,
     });
-    const events = parseSessionJsonl(line);
-    expect(events).toEqual([{ type: "assistant-text", text: "answer" }]);
+    const events = parseNormalizedSessionJsonl(line);
+    expect(events[0]).toMatchObject({ type: "tool-result", isError: false });
+  });
+
+  it("captures tool-result isError: true", () => {
+    const line = makeNormalizedLine("tool-result", {
+      callId: "c3",
+      toolName: "Bash",
+      result: "error message",
+      isError: true,
+    });
+    const events = parseNormalizedSessionJsonl(line);
+    expect(events[0]).toMatchObject({ type: "tool-result", isError: true });
+  });
+
+  it("skips session-start and warning lines", () => {
+    const lines = [
+      makeNormalizedLine("session-start", {
+        planId: "p1",
+        ticketId: "T-1",
+        session: { id: "s1", provider: "claude" },
+      }),
+      makeNormalizedLine("warning", { message: "something odd" }),
+      makeNormalizedLine("assistant-text", { text: "Done" }),
+    ].join("\n");
+    const events = parseNormalizedSessionJsonl(lines);
+    expect(events).toEqual([{ type: "assistant-text", text: "Done" }]);
   });
 
   it("skips malformed JSON lines without throwing", () => {
     const content = [
       "{not valid json",
-      JSON.stringify({
-        type: "assistant",
-        message: { content: [{ type: "text", text: "ok" }] },
-      }),
+      makeNormalizedLine("assistant-text", { text: "ok" }),
       "also bad}",
     ].join("\n");
-    expect(() => parseSessionJsonl(content)).not.toThrow();
-    const events = parseSessionJsonl(content);
-    expect(events).toEqual([{ type: "assistant-text", text: "ok" }]);
+    expect(() => parseNormalizedSessionJsonl(content)).not.toThrow();
+    expect(parseNormalizedSessionJsonl(content)).toEqual([
+      { type: "assistant-text", text: "ok" },
+    ]);
   });
 
   it("skips empty lines", () => {
-    const line = JSON.stringify({
-      type: "assistant",
-      message: { content: [{ type: "text", text: "hi" }] },
-    });
-    const content = `\n\n${line}\n\n`;
-    const events = parseSessionJsonl(content);
+    const line = makeNormalizedLine("assistant-text", { text: "hi" });
+    const events = parseNormalizedSessionJsonl(`\n\n${line}\n\n`);
     expect(events).toHaveLength(1);
   });
 
-  it("handles multiple assistant messages in order", () => {
-    const line1 = JSON.stringify({
-      type: "assistant",
-      message: { content: [{ type: "text", text: "first" }] },
-    });
-    const line2 = JSON.stringify({
-      type: "assistant",
-      message: {
-        content: [
-          { type: "tool_use", name: "Write", input: { file_path: "/a.ts" } },
-        ],
-      },
-    });
-    const events = parseSessionJsonl(`${line1}\n${line2}`);
+  it("handles multiple events in document order", () => {
+    const content = [
+      makeNormalizedLine("assistant-text", { text: "first" }),
+      makeNormalizedLine("tool-use", {
+        callId: "c1",
+        toolName: "Write",
+        input: { file_path: "/a.ts" },
+      }),
+      makeNormalizedLine("tool-result", {
+        callId: "c1",
+        toolName: "Write",
+        result: null,
+        isError: false,
+      }),
+    ].join("\n");
+    const events = parseNormalizedSessionJsonl(content);
     expect(events).toEqual([
       { type: "assistant-text", text: "first" },
       { type: "tool-use", name: "Write", input: { file_path: "/a.ts" } },
+      { type: "tool-result", callId: "c1", name: "Write", isError: false },
     ]);
   });
 });
 
-// ─── buildLogLines ────────────────────────────────────────────────────────────
+// ─── buildLogLines — derived dividers ────────────────────────────────────────
 
 describe("buildLogLines", () => {
   it("returns empty array for no events", () => {
@@ -206,6 +186,22 @@ describe("buildLogLines", () => {
       session: claudeSession,
     });
     expect(lines[1]).toEqual({ type: "blank" });
+  });
+
+  it("derives dividers per session at render time (not from persisted events)", () => {
+    const session1 = { id: "s1", provider: "claude" as const };
+    const session2 = { id: "s2", provider: "codex" as const };
+    const events: LogEvent[] = [
+      { type: "phase-divider", phase: "implement", session: session1 },
+      { type: "assistant-text", text: "hello" },
+      { type: "phase-divider", phase: "verify", session: session2 },
+      { type: "assistant-text", text: "done" },
+    ];
+    const lines = buildLogLines(events, 80);
+    const dividers = lines.filter((l) => l.type === "divider");
+    expect(dividers).toHaveLength(2);
+    expect(dividers[0]).toMatchObject({ phase: "implement" });
+    expect(dividers[1]).toMatchObject({ phase: "verify" });
   });
 
   it("word-wraps assistant-text to width", () => {
@@ -296,6 +292,33 @@ describe("buildLogLines", () => {
     const blankLines = lines.filter((l) => l.type === "blank");
     // One blank from the empty line between paragraphs + one trailing blank
     expect(blankLines.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("renders tool-result as tool-result line + blank", () => {
+    const events: LogEvent[] = [
+      {
+        type: "tool-result",
+        callId: "c1",
+        name: "Read",
+        isError: false,
+      },
+    ];
+    const lines = buildLogLines(events, 80);
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toEqual({
+      type: "tool-result",
+      name: "Read",
+      isError: false,
+    });
+    expect(lines[1]).toEqual({ type: "blank" });
+  });
+
+  it("preserves isError: true on tool-result lines", () => {
+    const events: LogEvent[] = [
+      { type: "tool-result", callId: "c1", name: "Bash", isError: true },
+    ];
+    const lines = buildLogLines(events, 80);
+    expect(lines[0]).toMatchObject({ type: "tool-result", isError: true });
   });
 });
 
@@ -419,6 +442,42 @@ describe("TicketLogsScreen", () => {
     unmount();
   });
 
+  it("renders tool-result events with success indicator", () => {
+    const events: LogEvent[] = [
+      {
+        type: "tool-result",
+        callId: "c1",
+        name: "Read",
+        isError: false,
+      },
+    ];
+    mockUseSessionLogs.mockReturnValue(events);
+
+    const { lastFrame, unmount } = renderLogsScreen({ height: 20 });
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("✓");
+    expect(frame).toContain("Read");
+    unmount();
+  });
+
+  it("renders tool-result events with error indicator", () => {
+    const events: LogEvent[] = [
+      {
+        type: "tool-result",
+        callId: "c1",
+        name: "Bash",
+        isError: true,
+      },
+    ];
+    mockUseSessionLogs.mockReturnValue(events);
+
+    const { lastFrame, unmount } = renderLogsScreen({ height: 20 });
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("✗");
+    expect(frame).toContain("Bash");
+    unmount();
+  });
+
   it("overflow indicator appears when totalLines > height", () => {
     const events: LogEvent[] = Array.from({ length: 20 }, (_, i) => ({
       type: "assistant-text" as const,
@@ -440,11 +499,25 @@ describe("TicketLogsScreen", () => {
     unmount();
   });
 
-  it("renders empty screen when no events", () => {
+  it("renders empty state placeholder when no events", () => {
     mockUseSessionLogs.mockReturnValue([]);
 
     const { lastFrame, unmount } = renderLogsScreen({ height: 10 });
-    expect(lastFrame()).not.toContain("↑↓");
+    const frame = lastFrame() ?? "";
+    expect(frame).toContain("No session logs yet.");
+    expect(frame).not.toContain("↑↓");
+    unmount();
+  });
+
+  it("renders empty state when ticket has no identified sessions", () => {
+    const ticket = makeTicket({
+      currentSession: null,
+      phaseHistory: [],
+    });
+    mockUseSessionLogs.mockReturnValue([]);
+
+    const { lastFrame, unmount } = renderLogsScreen({ ticket, height: 10 });
+    expect(lastFrame()).toContain("No session logs yet.");
     unmount();
   });
 });

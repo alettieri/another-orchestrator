@@ -1,30 +1,20 @@
-import os from "node:os";
 import type { AgentSession } from "../../core/types.js";
 import { wrapText } from "./TicketDetailsScreen.helpers.js";
-
-export type ClaudeSession = AgentSession & { provider: "claude" };
 
 export type LogEvent =
   | { type: "phase-divider"; phase: string; session: AgentSession }
   | { type: "assistant-text"; text: string }
-  | { type: "tool-use"; name: string; input: unknown };
+  | { type: "tool-use"; name: string; input: unknown }
+  | { type: "tool-result"; callId: string; name: string; isError: boolean };
 
 export type LogLine =
   | { type: "divider"; phase: string; session: AgentSession }
   | { type: "text"; text: string }
   | { type: "tool"; name: string; summary: string }
+  | { type: "tool-result"; name: string; isError: boolean }
   | { type: "blank" };
 
-export function resolveClaudeSessionPath(
-  worktree: string,
-  session: ClaudeSession,
-): string {
-  const sanitized = worktree.replaceAll("/", "-");
-  const home = os.homedir();
-  return `${home}/.claude/projects/${sanitized}/${session.id}.jsonl`;
-}
-
-export function parseSessionJsonl(content: string): LogEvent[] {
+export function parseNormalizedSessionJsonl(content: string): LogEvent[] {
   const events: LogEvent[] = [];
 
   for (const line of content.split("\n")) {
@@ -37,30 +27,33 @@ export function parseSessionJsonl(content: string): LogEvent[] {
       continue;
     }
 
-    if (
-      typeof obj !== "object" ||
-      obj === null ||
-      (obj as Record<string, unknown>).type !== "assistant"
+    if (typeof obj !== "object" || obj === null) continue;
+    const event = obj as Record<string, unknown>;
+
+    if (event.type === "assistant-text" && typeof event.text === "string") {
+      events.push({ type: "assistant-text", text: event.text });
+    } else if (
+      event.type === "tool-use" &&
+      typeof event.toolName === "string"
     ) {
-      continue;
+      events.push({
+        type: "tool-use",
+        name: event.toolName,
+        input: event.input ?? null,
+      });
+    } else if (
+      event.type === "tool-result" &&
+      typeof event.callId === "string" &&
+      typeof event.toolName === "string"
+    ) {
+      events.push({
+        type: "tool-result",
+        callId: event.callId,
+        name: event.toolName,
+        isError: event.isError === true,
+      });
     }
-
-    const message = (obj as Record<string, unknown>).message;
-    if (typeof message !== "object" || message === null) continue;
-
-    const contentArr = (message as Record<string, unknown>).content;
-    if (!Array.isArray(contentArr)) continue;
-
-    for (const block of contentArr) {
-      if (typeof block !== "object" || block === null) continue;
-      const b = block as Record<string, unknown>;
-
-      if (b.type === "text" && typeof b.text === "string") {
-        events.push({ type: "assistant-text", text: b.text });
-      } else if (b.type === "tool_use" && typeof b.name === "string") {
-        events.push({ type: "tool-use", name: b.name, input: b.input });
-      }
-    }
+    // session-start, warning: not rendered
   }
 
   return events;
@@ -117,6 +110,13 @@ export function buildLogLines(events: LogEvent[], width: number): LogLine[] {
       const maxSummaryLen = Math.max(0, width - event.name.length - 4);
       const summary = inlineInput(event.input, maxSummaryLen);
       lines.push({ type: "tool", name: event.name, summary });
+      lines.push({ type: "blank" });
+    } else if (event.type === "tool-result") {
+      lines.push({
+        type: "tool-result",
+        name: event.name,
+        isError: event.isError,
+      });
       lines.push({ type: "blank" });
     }
   }
