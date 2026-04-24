@@ -148,7 +148,11 @@ describe("useSessionLogs", () => {
 
     // Before async load: only phase-divider is emitted (derived synchronously)
     expect(captured[0]).toEqual([
-      { type: "phase-divider", phase: "implement", sessionId: "sess1" },
+      {
+        type: "phase-divider",
+        phase: "implement",
+        session: { id: "sess1", provider: "claude" },
+      },
     ]);
 
     unmount();
@@ -301,7 +305,7 @@ describe("useSessionLogs", () => {
     expect(last).toContainEqual({
       type: "phase-divider",
       phase: "implement",
-      sessionId: "sess1",
+      session: { id: "sess1", provider: "claude" },
     });
     expect(last).toContainEqual({ type: "assistant-text", text: "Hello" });
 

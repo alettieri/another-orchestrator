@@ -103,7 +103,7 @@ function LogLineRow({ line }: { line: LogLine }): React.ReactElement {
     return (
       <Text
         dimColor
-      >{`─── ${line.phase}  ${line.sessionId.slice(0, 8)} ───`}</Text>
+      >{`─── ${line.phase}  ${line.session.provider}:${line.session.id.slice(0, 8)} ───`}</Text>
     );
   }
   if (line.type === "text") {
