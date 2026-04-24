@@ -96,6 +96,96 @@ export const AgentSessionSchema = z
 
 export type AgentSession = z.infer<typeof AgentSessionSchema>;
 
+// --- Session Logs ---
+
+export const SessionLogEventTypeSchema = z.enum([
+  "session-start",
+  "assistant-text",
+  "tool-use",
+  "tool-result",
+  "warning",
+]);
+
+export type SessionLogEventType = z.infer<typeof SessionLogEventTypeSchema>;
+
+export type JsonValue =
+  | null
+  | boolean
+  | number
+  | string
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
+export const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.null(),
+    z.boolean(),
+    z.number(),
+    z.string(),
+    z.array(JsonValueSchema),
+    z.record(z.string(), JsonValueSchema),
+  ]),
+);
+
+const SessionLogEventBaseSchema = z.object({
+  v: z.literal(1),
+  timestamp: z.string(),
+});
+
+export const SessionStartLogEventSchema = SessionLogEventBaseSchema.extend({
+  type: z.literal("session-start"),
+  planId: z.string(),
+  ticketId: z.string(),
+  session: AgentSessionSchema,
+}).strict();
+
+export type SessionStartLogEvent = z.infer<typeof SessionStartLogEventSchema>;
+
+export const AssistantTextLogEventSchema = SessionLogEventBaseSchema.extend({
+  type: z.literal("assistant-text"),
+  text: z.string(),
+}).strict();
+
+export type AssistantTextLogEvent = z.infer<typeof AssistantTextLogEventSchema>;
+
+export const ToolUseLogEventSchema = SessionLogEventBaseSchema.extend({
+  type: z.literal("tool-use"),
+  callId: z.string(),
+  toolName: z.string(),
+  input: JsonValueSchema,
+}).strict();
+
+export type ToolUseLogEvent = z.infer<typeof ToolUseLogEventSchema>;
+
+export const ToolResultLogEventSchema = SessionLogEventBaseSchema.extend({
+  type: z.literal("tool-result"),
+  callId: z.string(),
+  toolName: z.string(),
+  result: JsonValueSchema,
+  isError: z.boolean().default(false),
+}).strict();
+
+export type ToolResultLogEvent = z.infer<typeof ToolResultLogEventSchema>;
+
+export const WarningLogEventSchema = SessionLogEventBaseSchema.extend({
+  type: z.literal("warning"),
+  message: z.string(),
+  code: z.string().optional(),
+  data: JsonValueSchema.optional(),
+}).strict();
+
+export type WarningLogEvent = z.infer<typeof WarningLogEventSchema>;
+
+export const SessionLogEventSchema = z.discriminatedUnion("type", [
+  SessionStartLogEventSchema,
+  AssistantTextLogEventSchema,
+  ToolUseLogEventSchema,
+  ToolResultLogEventSchema,
+  WarningLogEventSchema,
+]);
+
+export type SessionLogEvent = z.infer<typeof SessionLogEventSchema>;
+
 export const TicketStatusSchema = z.enum([
   "queued",
   "ready",

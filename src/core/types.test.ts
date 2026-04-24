@@ -6,6 +6,8 @@ import {
   PhaseHistoryEntrySchema,
   PlanFileSchema,
   RawOrchestratorConfigSchema,
+  SessionLogEventSchema,
+  SessionLogEventTypeSchema,
   TicketStateSchema,
   TicketStatusSchema,
   WorkflowDefinitionSchema,
@@ -180,6 +182,18 @@ describe("AgentSessionSchema", () => {
   });
 });
 
+describe("SessionLogEventTypeSchema", () => {
+  for (const type of SessionLogEventTypeSchema.options) {
+    it(`accepts "${type}"`, () => {
+      expect(SessionLogEventTypeSchema.parse(type)).toBe(type);
+    });
+  }
+
+  it("rejects an invalid type", () => {
+    expect(() => SessionLogEventTypeSchema.parse("invalid")).toThrow();
+  });
+});
+
 describe("PlanFileSchema", () => {
   const validPlan = {
     id: "plan-1",
@@ -350,6 +364,81 @@ describe("WorkflowDefinitionSchema", () => {
       WorkflowDefinitionSchema.parse({
         name: "bad",
         phases: [{ id: "x", type: "invalid" }],
+      }),
+    ).toThrow();
+  });
+});
+
+describe("SessionLogEventSchema", () => {
+  const base = {
+    v: 1 as const,
+    timestamp: "2026-04-24T12:34:56Z",
+  };
+
+  it("parses session-start", () => {
+    const result = SessionLogEventSchema.parse({
+      ...base,
+      type: "session-start",
+      planId: "plan-1",
+      ticketId: "t-1",
+      session: { id: SESSION_ID, provider: "claude" as const },
+    });
+    expect(result.type).toBe("session-start");
+  });
+
+  it("parses assistant-text", () => {
+    const result = SessionLogEventSchema.parse({
+      ...base,
+      type: "assistant-text",
+      text: "hello",
+    });
+    expect(result.type).toBe("assistant-text");
+  });
+
+  it("parses tool-use", () => {
+    const result = SessionLogEventSchema.parse({
+      ...base,
+      type: "tool-use",
+      callId: "call-1",
+      toolName: "web.run",
+      input: { q: "x", list: [1, 2, 3] },
+    });
+    expect(result.type).toBe("tool-use");
+  });
+
+  it("parses tool-result and defaults isError", () => {
+    const result = SessionLogEventSchema.parse({
+      ...base,
+      type: "tool-result",
+      callId: "call-1",
+      toolName: "web.run",
+      result: { ok: true },
+    });
+    expect(result.type).toBe("tool-result");
+    if (result.type !== "tool-result") {
+      throw new Error("Expected tool-result event");
+    }
+    expect(result.isError).toBe(false);
+  });
+
+  it("parses warning", () => {
+    const result = SessionLogEventSchema.parse({
+      ...base,
+      type: "warning",
+      message: "something happened",
+      code: "WARN_TEST",
+      data: { details: ["a", "b"] },
+    });
+    expect(result.type).toBe("warning");
+  });
+
+  it("rejects extra fields (strict objects)", () => {
+    expect(() =>
+      SessionLogEventSchema.parse({
+        ...base,
+        type: "assistant-text",
+        text: "hello",
+        extra: "nope",
       }),
     ).toThrow();
   });
