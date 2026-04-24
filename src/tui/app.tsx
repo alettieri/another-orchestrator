@@ -184,6 +184,7 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
             ticket={selectedTicket}
             height={tableHeight}
             width={terminalWidth}
+            stateDir={stateDir}
           />
         ) : currentScreen.type === "ticket-details" && selectedTicket ? (
           <TicketDetailsScreen

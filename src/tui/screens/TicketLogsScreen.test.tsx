@@ -346,13 +346,24 @@ import { useSessionLogs } from "../hooks/useSessionLogs.js";
 const mockUseSessionLogs = vi.mocked(useSessionLogs);
 
 function renderLogsScreen(
-  props: { ticket?: TicketState; height?: number; width?: number } = {},
+  props: {
+    ticket?: TicketState;
+    height?: number;
+    width?: number;
+    stateDir?: string;
+  } = {},
 ) {
   const ticket = props.ticket ?? makeTicket();
   const height = props.height ?? 30;
   const width = props.width ?? 80;
+  const stateDir = props.stateDir ?? "/state";
   const element = (
-    <TicketLogsScreen ticket={ticket} height={height} width={width} />
+    <TicketLogsScreen
+      ticket={ticket}
+      height={height}
+      width={width}
+      stateDir={stateDir}
+    />
   );
   return render(element);
 }

@@ -10,14 +10,16 @@ interface TicketLogsScreenProps {
   ticket: TicketState;
   height: number;
   width: number;
+  stateDir: string;
 }
 
 export function TicketLogsScreen({
   ticket,
   height,
   width,
+  stateDir,
 }: TicketLogsScreenProps): React.ReactElement {
-  const events = useSessionLogs(ticket);
+  const events = useSessionLogs(ticket, stateDir);
   const [scrollOffset, setScrollOffset] = useState(0);
   const [pinned, setPinned] = useState(true);
 

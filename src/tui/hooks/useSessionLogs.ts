@@ -2,42 +2,94 @@ import { readFile } from "node:fs/promises";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { watch } from "chokidar";
 import { useEffect, useMemo } from "react";
-import type { PhaseHistoryEntry, TicketState } from "../../core/types.js";
-import {
-  type ClaudeSession,
-  type LogEvent,
-  parseSessionJsonl,
-  resolveClaudeSessionPath,
-} from "../screens/TicketLogsScreen.helpers.js";
+import { resolveSessionLogPath } from "../../core/sessionLogs.js";
+import type { AgentSession, TicketState } from "../../core/types.js";
+import type { LogEvent } from "../screens/TicketLogsScreen.helpers.js";
 
-type PhaseWithSession = PhaseHistoryEntry & {
-  session: ClaudeSession;
+type SessionEntry = {
+  phase: string;
+  session: AgentSession;
 };
 
-function sessionLogKey(worktree: string, sessionId: string) {
-  return ["session-log", worktree, sessionId] as const;
+function sessionLogKey(planId: string, ticketId: string, sessionId: string) {
+  return ["session-log", planId, ticketId, sessionId] as const;
 }
 
-export function useSessionLogs(ticket: TicketState): LogEvent[] {
-  const queryClient = useQueryClient();
-  const worktree = ticket.worktree;
+function parseOrchestratorSessionJsonl(content: string): LogEvent[] {
+  const events: LogEvent[] = [];
 
-  const phasesWithSession = useMemo(
-    () =>
-      ticket.phaseHistory.filter(
-        (e): e is PhaseWithSession => e.session?.provider === "claude",
-      ),
-    [ticket.phaseHistory],
-  );
+  for (const line of content.split("\n")) {
+    if (!line.trim()) continue;
+
+    let obj: unknown;
+    try {
+      obj = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    if (typeof obj !== "object" || obj === null) continue;
+    const event = obj as Record<string, unknown>;
+
+    if (event.type === "assistant-text" && typeof event.text === "string") {
+      events.push({ type: "assistant-text", text: event.text });
+    } else if (
+      event.type === "tool-use" &&
+      typeof event.toolName === "string"
+    ) {
+      events.push({
+        type: "tool-use",
+        name: event.toolName,
+        input: event.input ?? null,
+      });
+    }
+    // session-start, tool-result, warning: not rendered in this pass
+  }
+
+  return events;
+}
+
+export function useSessionLogs(
+  ticket: TicketState,
+  stateDir: string,
+): LogEvent[] {
+  const queryClient = useQueryClient();
+  const { planId, ticketId } = ticket;
+
+  const sessionEntries = useMemo(() => {
+    const entries: SessionEntry[] = [];
+    const seen = new Set<string>();
+
+    for (const entry of ticket.phaseHistory) {
+      if (entry.session && !seen.has(entry.session.id)) {
+        entries.push({ phase: entry.phase, session: entry.session });
+        seen.add(entry.session.id);
+      }
+    }
+
+    if (ticket.currentSession && !seen.has(ticket.currentSession.id)) {
+      entries.push({
+        phase: ticket.currentPhase,
+        session: ticket.currentSession,
+      });
+    }
+
+    return entries;
+  }, [ticket.phaseHistory, ticket.currentSession, ticket.currentPhase]);
 
   const results = useQueries({
-    queries: phasesWithSession.map((entry) => ({
-      queryKey: sessionLogKey(worktree, entry.session.id),
+    queries: sessionEntries.map((entry) => ({
+      queryKey: sessionLogKey(planId, ticketId, entry.session.id),
       queryFn: async () => {
-        const path = resolveClaudeSessionPath(worktree, entry.session);
+        const path = resolveSessionLogPath(
+          stateDir,
+          planId,
+          ticketId,
+          entry.session.id,
+        );
         try {
           const content = await readFile(path, "utf-8");
-          return parseSessionJsonl(content);
+          return parseOrchestratorSessionJsonl(content);
         } catch {
           return [] as LogEvent[];
         }
@@ -46,10 +98,10 @@ export function useSessionLogs(ticket: TicketState): LogEvent[] {
   });
 
   useEffect(() => {
-    if (phasesWithSession.length === 0) return;
+    if (sessionEntries.length === 0) return;
 
-    const paths = phasesWithSession.map((e) =>
-      resolveClaudeSessionPath(worktree, e.session),
+    const paths = sessionEntries.map((e) =>
+      resolveSessionLogPath(stateDir, planId, ticketId, e.session.id),
     );
 
     const watcher = watch(paths, { ignoreInitial: true });
@@ -58,23 +110,28 @@ export function useSessionLogs(ticket: TicketState): LogEvent[] {
       const idx = paths.indexOf(filePath);
       if (idx !== -1) {
         void queryClient.invalidateQueries({
-          queryKey: sessionLogKey(worktree, phasesWithSession[idx].session.id),
+          queryKey: sessionLogKey(
+            planId,
+            ticketId,
+            sessionEntries[idx].session.id,
+          ),
         });
       }
     };
 
     watcher.on("add", invalidate);
     watcher.on("change", invalidate);
+    watcher.on("unlink", invalidate);
 
     return () => {
       watcher.close();
     };
-  }, [phasesWithSession, worktree, queryClient]);
+  }, [sessionEntries, planId, ticketId, stateDir, queryClient]);
 
   return useMemo(() => {
     const allEvents: LogEvent[] = [];
-    for (let i = 0; i < phasesWithSession.length; i++) {
-      const entry = phasesWithSession[i];
+    for (let i = 0; i < sessionEntries.length; i++) {
+      const entry = sessionEntries[i];
       allEvents.push({
         type: "phase-divider",
         phase: entry.phase,
@@ -84,5 +141,5 @@ export function useSessionLogs(ticket: TicketState): LogEvent[] {
       allEvents.push(...events);
     }
     return allEvents;
-  }, [phasesWithSession, results]);
+  }, [sessionEntries, results]);
 }
