@@ -5,12 +5,12 @@ import { wrapText } from "./TicketDetailsScreen.helpers.js";
 export type ClaudeSession = AgentSession & { provider: "claude" };
 
 export type LogEvent =
-  | { type: "phase-divider"; phase: string; session: ClaudeSession }
+  | { type: "phase-divider"; phase: string; session: AgentSession }
   | { type: "assistant-text"; text: string }
   | { type: "tool-use"; name: string; input: unknown };
 
 export type LogLine =
-  | { type: "divider"; phase: string; session: ClaudeSession }
+  | { type: "divider"; phase: string; session: AgentSession }
   | { type: "text"; text: string }
   | { type: "tool"; name: string; summary: string }
   | { type: "blank" };
