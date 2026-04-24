@@ -5,7 +5,7 @@ tags: [bugfix, agent]
 phases:
   - id: setup
     type: script
-    command: setup.sh
+    command: setup-worktree.sh
     args:
       - "{{ repo }}"
       - "{{ branch }}"
