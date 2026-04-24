@@ -1,10 +1,12 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pino from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentResult } from "../agents/invoke.js";
 import * as invokeModule from "../agents/invoke.js";
+import { resolveSessionLogPath } from "../core/sessionLogs.js";
 import { createTemplateRenderer } from "../core/template.js";
 import type {
   OrchestratorConfig,
@@ -469,6 +471,84 @@ describe("executor", () => {
           provider: "claude",
         },
       });
+
+      invokeSpy.mockRestore();
+    });
+
+    it("writes normalized session log events only after session is identified", async () => {
+      await writeFile(join(promptDir, "session-log.md"), "capture session log");
+
+      const session = {
+        id: "structured-session-id",
+        provider: "claude",
+      } as const;
+      const sessionPath = resolveSessionLogPath(
+        config.stateDir,
+        "plan-1",
+        "TICKET-1",
+        session.id,
+      );
+
+      const invokeSpy = vi
+        .spyOn(invokeModule, "invokeAgent")
+        .mockImplementation(async (_agentConfig, _invocation, callbacks) => {
+          await callbacks?.onSessionLogEvent?.({
+            type: "assistant-text",
+            text: "pre-session",
+          });
+          expect(existsSync(sessionPath)).toBe(false);
+
+          await callbacks?.onSession?.(session);
+          await callbacks?.onSessionLogEvent?.({ type: "session-start" });
+          await callbacks?.onSessionLogEvent?.({
+            type: "assistant-text",
+            text: "post-session",
+          });
+
+          return {
+            stdout: "ok",
+            stderr: "",
+            exitCode: 0,
+            success: true,
+            session,
+          } satisfies AgentResult;
+        });
+
+      const phase: PhaseDefinition = {
+        id: "agent_phase",
+        type: "agent",
+        promptTemplate: "session-log.md",
+        agent: "claude",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+        onSuccess: "done",
+        onFailure: "fail",
+      };
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger);
+
+      await executor.execute(phase, makeTicket(), null);
+
+      expect(existsSync(sessionPath)).toBe(true);
+
+      const content = await readFile(sessionPath, "utf-8");
+      const lines = content
+        .split("\n")
+        .map((l) => l.trim())
+        .filter(Boolean);
+      expect(lines.length).toBe(2);
+
+      const first = JSON.parse(lines[0]) as Record<string, unknown>;
+      expect(first.type).toBe("session-start");
+      expect(first.planId).toBe("plan-1");
+      expect(first.ticketId).toBe("TICKET-1");
+      expect(first.session).toEqual(session);
+
+      const second = JSON.parse(lines[1]) as Record<string, unknown>;
+      expect(second.type).toBe("assistant-text");
+      expect(second.text).toBe("post-session");
 
       invokeSpy.mockRestore();
     });

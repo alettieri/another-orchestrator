@@ -1,4 +1,5 @@
-import type { AgentConfig, AgentSession } from "../core/types.js";
+import type { SessionLogEventInput } from "../core/sessionLogWriter.js";
+import type { AgentConfig, AgentSession, JsonValue } from "../core/types.js";
 import { execCommandStreaming } from "../utils/shell.js";
 
 export interface AgentInvocation {
@@ -19,6 +20,7 @@ export interface AgentResult {
 export interface AgentCallbacks {
   onOutput?: (chunk: string) => void;
   onSession?: (session: AgentSession) => void | Promise<void>;
+  onSessionLogEvent?: (event: SessionLogEventInput) => void | Promise<void>;
 }
 
 const DEFAULT_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
@@ -64,9 +66,16 @@ export function buildAgentArgs(
 
 export function createClaudeStreamParser(options?: {
   onSession?: (session: AgentSession) => void | Promise<void>;
+  onSessionLogEvent?: (event: SessionLogEventInput) => void | Promise<void>;
 }) {
   let session: AgentSession | undefined;
   let finalText: string | undefined;
+  const toolNamesByCallId = new Map<string, string>();
+
+  const emit = (event: SessionLogEventInput): void => {
+    if (!session) return;
+    void options?.onSessionLogEvent?.(event);
+  };
 
   return createJsonLineStreamParser(
     (event) => {
@@ -78,11 +87,81 @@ export function createClaudeStreamParser(options?: {
       ) {
         session = { id: event.session_id, provider: "claude" };
         void options?.onSession?.(session);
+        emit({ type: "session-start" });
         return;
       }
 
       if (event.type === "result" && typeof event.result === "string") {
         finalText = event.result;
+      }
+
+      if (!session) return;
+
+      if (event.type === "assistant") {
+        const message = event.message;
+        if (!message || typeof message !== "object") return;
+        const content = (message as Record<string, unknown>).content;
+        if (!Array.isArray(content)) return;
+
+        for (const block of content) {
+          if (!block || typeof block !== "object") continue;
+          const b = block as Record<string, unknown>;
+
+          if (b.type === "text" && typeof b.text === "string") {
+            emit({ type: "assistant-text", text: b.text });
+            continue;
+          }
+
+          if (b.type === "tool_use") {
+            const callId = b.id;
+            const toolName = b.name;
+            if (typeof callId !== "string" || typeof toolName !== "string") {
+              continue;
+            }
+            toolNamesByCallId.set(callId, toolName);
+            emit({
+              type: "tool-use",
+              callId,
+              toolName,
+              input: (b.input ?? null) as JsonValue,
+            });
+          }
+        }
+        return;
+      }
+
+      if (event.type === "user") {
+        const message = event.message;
+        if (!message || typeof message !== "object") return;
+        const content = (message as Record<string, unknown>).content;
+        if (!Array.isArray(content)) return;
+
+        for (const block of content) {
+          if (!block || typeof block !== "object") continue;
+          const b = block as Record<string, unknown>;
+          if (b.type !== "tool_result") continue;
+
+          const callId = b.tool_use_id;
+          if (typeof callId !== "string") continue;
+
+          const toolName =
+            toolNamesByCallId.get(callId) ??
+            (typeof b.name === "string" ? b.name : "unknown");
+          const isError =
+            typeof b.is_error === "boolean"
+              ? b.is_error
+              : typeof b.isError === "boolean"
+                ? b.isError
+                : false;
+
+          emit({
+            type: "tool-result",
+            callId,
+            toolName,
+            result: (b.content ?? b.result ?? b.output ?? null) as JsonValue,
+            isError,
+          });
+        }
       }
     },
     {
@@ -98,12 +177,31 @@ export function createClaudeStreamParser(options?: {
 
 export function createCodexStreamParser(options?: {
   onSession?: (session: AgentSession) => void | Promise<void>;
+  onSessionLogEvent?: (event: SessionLogEventInput) => void | Promise<void>;
 }) {
   let session: AgentSession | undefined;
   let finalText: string | undefined;
 
+  const emit = (event: SessionLogEventInput): void => {
+    if (!session) return;
+    void options?.onSessionLogEvent?.(event);
+  };
+
   return createJsonLineStreamParser(
     (event) => {
+      if (
+        event.type === "item.completed" &&
+        event.item &&
+        typeof event.item === "object"
+      ) {
+        const item = event.item as Record<string, unknown>;
+        if (item.type === "agent_message" && typeof item.text === "string") {
+          finalText = item.text;
+          emit({ type: "assistant-text", text: item.text });
+          return;
+        }
+      }
+
       if (
         session === undefined &&
         event.type === "thread.started" &&
@@ -111,16 +209,59 @@ export function createCodexStreamParser(options?: {
       ) {
         session = { id: event.thread_id, provider: "codex" };
         void options?.onSession?.(session);
+        emit({ type: "session-start" });
         return;
       }
 
-      if (event.type !== "item.completed") return;
+      if (!session) return;
+
+      if (event.type !== "item.started" && event.type !== "item.completed") {
+        return;
+      }
       if (!event.item || typeof event.item !== "object") return;
 
       const item = event.item as Record<string, unknown>;
-      if (item.type === "agent_message" && typeof item.text === "string") {
-        finalText = item.text;
+
+      if (item.type !== "command_execution") return;
+
+      const callId = item.id;
+      if (typeof callId !== "string") return;
+
+      const toolName =
+        typeof item.toolName === "string"
+          ? item.toolName
+          : typeof item.name === "string"
+            ? item.name
+            : "command_execution";
+
+      if (event.type === "item.started") {
+        emit({
+          type: "tool-use",
+          callId,
+          toolName,
+          input: (item.input ?? item.command ?? item) as JsonValue,
+        });
+        return;
       }
+
+      const isError =
+        typeof item.is_error === "boolean"
+          ? item.is_error
+          : typeof item.isError === "boolean"
+            ? item.isError
+            : typeof item.success === "boolean"
+              ? !item.success
+              : typeof item.exit_code === "number"
+                ? item.exit_code !== 0
+                : false;
+
+      emit({
+        type: "tool-result",
+        callId,
+        toolName,
+        result: (item.result ?? item.output ?? item) as JsonValue,
+        isError,
+      });
     },
     {
       get session() {
@@ -188,9 +329,15 @@ export async function invokeAgent(
   const { command, args } = buildAgentArgs(agentConfig, invocation);
   const parser =
     agentConfig.command === "claude"
-      ? createClaudeStreamParser({ onSession: callbacks?.onSession })
+      ? createClaudeStreamParser({
+          onSession: callbacks?.onSession,
+          onSessionLogEvent: callbacks?.onSessionLogEvent,
+        })
       : agentConfig.command === "codex"
-        ? createCodexStreamParser({ onSession: callbacks?.onSession })
+        ? createCodexStreamParser({
+            onSession: callbacks?.onSession,
+            onSessionLogEvent: callbacks?.onSessionLogEvent,
+          })
         : undefined;
 
   const result = await execCommandStreaming(command, args, {
