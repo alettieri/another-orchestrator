@@ -4,7 +4,10 @@ import { watch } from "chokidar";
 import { useEffect, useMemo } from "react";
 import { resolveSessionLogPath } from "../../core/sessionLogs.js";
 import type { AgentSession, TicketState } from "../../core/types.js";
-import type { LogEvent } from "../screens/TicketLogsScreen.helpers.js";
+import {
+  type LogEvent,
+  parseNormalizedSessionJsonl,
+} from "../screens/TicketLogsScreen.helpers.js";
 
 type SessionEntry = {
   phase: string;
@@ -13,40 +16,6 @@ type SessionEntry = {
 
 function sessionLogKey(planId: string, ticketId: string, sessionId: string) {
   return ["session-log", planId, ticketId, sessionId] as const;
-}
-
-function parseOrchestratorSessionJsonl(content: string): LogEvent[] {
-  const events: LogEvent[] = [];
-
-  for (const line of content.split("\n")) {
-    if (!line.trim()) continue;
-
-    let obj: unknown;
-    try {
-      obj = JSON.parse(line);
-    } catch {
-      continue;
-    }
-
-    if (typeof obj !== "object" || obj === null) continue;
-    const event = obj as Record<string, unknown>;
-
-    if (event.type === "assistant-text" && typeof event.text === "string") {
-      events.push({ type: "assistant-text", text: event.text });
-    } else if (
-      event.type === "tool-use" &&
-      typeof event.toolName === "string"
-    ) {
-      events.push({
-        type: "tool-use",
-        name: event.toolName,
-        input: event.input ?? null,
-      });
-    }
-    // session-start, tool-result, warning: not rendered in this pass
-  }
-
-  return events;
 }
 
 export function useSessionLogs(
@@ -89,7 +58,7 @@ export function useSessionLogs(
         );
         try {
           const content = await readFile(path, "utf-8");
-          return parseOrchestratorSessionJsonl(content);
+          return parseNormalizedSessionJsonl(content);
         } catch {
           return [] as LogEvent[];
         }

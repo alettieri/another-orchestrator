@@ -534,7 +534,7 @@ describe("useSessionLogs", () => {
     unmount();
   });
 
-  it("skips session-start, tool-result, and warning lines silently", async () => {
+  it("skips session-start and warning lines, renders tool-result", async () => {
     const lines = [
       makeNormalizedLine("session-start", {
         planId: "plan-1",
@@ -545,6 +545,7 @@ describe("useSessionLogs", () => {
         callId: "c1",
         toolName: "Read",
         result: "content",
+        isError: false,
       }),
       makeNormalizedLine("warning", { message: "something odd" }),
       makeNormalizedLine("assistant-text", { text: "Done" }),
@@ -575,8 +576,17 @@ describe("useSessionLogs", () => {
 
     const last = captured[captured.length - 1];
     const nonDividers = last.filter((e) => e.type !== "phase-divider");
-    expect(nonDividers).toHaveLength(1);
-    expect(nonDividers[0]).toEqual({ type: "assistant-text", text: "Done" });
+    expect(nonDividers).toHaveLength(2);
+    expect(nonDividers).toContainEqual({
+      type: "tool-result",
+      callId: "c1",
+      name: "Read",
+      isError: false,
+    });
+    expect(nonDividers).toContainEqual({
+      type: "assistant-text",
+      text: "Done",
+    });
     unmount();
   });
 
