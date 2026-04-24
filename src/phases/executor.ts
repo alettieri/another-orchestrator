@@ -2,6 +2,10 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { invokeAgent } from "../agents/invoke.js";
 import { resolveAgent } from "../core/config.js";
+import {
+  createSessionLogWriter,
+  type SessionLogWriter,
+} from "../core/sessionLogWriter.js";
 import type { StateManager } from "../core/state.js";
 import type { TemplateRenderer } from "../core/template.js";
 import {
@@ -126,6 +130,9 @@ export function createPhaseExecutor(
     log: Logger,
     signal?: AbortSignal,
   ): Promise<PhaseResult> {
+    let sessionLogWriter: SessionLogWriter | undefined;
+    let sessionLogWrites: Promise<void> = Promise.resolve();
+
     const persistSessionUpdate = async (
       update: Partial<Pick<TicketState, "currentSession">>,
       fieldName: "currentSession",
@@ -172,11 +179,31 @@ export function createPhaseExecutor(
       },
       {
         onOutput: (chunk) => log.trace(chunk),
-        onSession: async (session) =>
-          persistSessionUpdate({ currentSession: session }, "currentSession"),
+        onSession: (session) => {
+          sessionLogWriter ??= createSessionLogWriter({
+            stateDir: config.stateDir,
+            planId: ticket.planId,
+            ticketId: ticket.ticketId,
+            session,
+          });
+          return persistSessionUpdate(
+            { currentSession: session },
+            "currentSession",
+          );
+        },
+        onSessionLogEvent: (event) => {
+          const writer = sessionLogWriter;
+          if (!writer) return;
+          sessionLogWrites = writer.append(event).catch((err) => {
+            const msg = err instanceof Error ? err.message : String(err);
+            log.warn(`Failed to append session log event: ${msg}`);
+          });
+        },
       },
       { signal },
     );
+
+    await sessionLogWrites;
 
     const captured = await captureValues(phase, agentResult.stdout, ticket);
     const nextPhase = getNextPhase(phase, agentResult.success);

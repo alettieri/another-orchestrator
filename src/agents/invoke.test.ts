@@ -156,6 +156,83 @@ describe("createClaudeStreamParser", () => {
     expect(parser.finalText).toBeUndefined();
     expect(parser.session).toBeUndefined();
   });
+
+  it("emits normalized session log events only after session start", () => {
+    const logEvents: unknown[] = [];
+    const parser = createClaudeStreamParser({
+      onSessionLogEvent: (event) => {
+        logEvents.push(event);
+      },
+    });
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "assistant",
+        message: { content: [{ type: "text", text: "pre-session" }] },
+      })}\n`,
+    );
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "system",
+        subtype: "init",
+        session_id: "abc-123",
+      })}\n`,
+    );
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "assistant",
+        message: {
+          content: [
+            { type: "text", text: "Hello" },
+            {
+              type: "tool_use",
+              id: "call_1",
+              name: "Read",
+              input: { file_path: "/foo.ts" },
+            },
+          ],
+        },
+      })}\n`,
+    );
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "user",
+        message: {
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "call_1",
+              content: "ok",
+              is_error: false,
+            },
+          ],
+        },
+      })}\n`,
+    );
+
+    parser.end();
+
+    expect(logEvents).toEqual([
+      { type: "session-start" },
+      { type: "assistant-text", text: "Hello" },
+      {
+        type: "tool-use",
+        callId: "call_1",
+        toolName: "Read",
+        input: { file_path: "/foo.ts" },
+      },
+      {
+        type: "tool-result",
+        callId: "call_1",
+        toolName: "Read",
+        result: "ok",
+        isError: false,
+      },
+    ]);
+  });
 });
 
 describe("createCodexStreamParser", () => {
@@ -251,6 +328,90 @@ describe("createCodexStreamParser", () => {
     parser.end();
     expect(parser.finalText).toBeUndefined();
     expect(parser.session).toBeUndefined();
+  });
+
+  it("emits normalized session log events only after session start", () => {
+    const logEvents: unknown[] = [];
+    const parser = createCodexStreamParser({
+      onSessionLogEvent: (event) => {
+        logEvents.push(event);
+      },
+    });
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "item.completed",
+        item: { id: "item_1", type: "agent_message", text: "pre-session" },
+      })}\n`,
+    );
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "thread.started",
+        thread_id: "codex-123",
+      })}\n`,
+    );
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "item.started",
+        item: {
+          id: "cmd_1",
+          type: "command_execution",
+          command: "ls",
+        },
+      })}\n`,
+    );
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "item.completed",
+        item: {
+          id: "cmd_1",
+          type: "command_execution",
+          exit_code: 0,
+          stdout: "out",
+          stderr: "",
+        },
+      })}\n`,
+    );
+
+    parser.feed(
+      `${JSON.stringify({
+        type: "item.completed",
+        item: {
+          id: "item_2",
+          type: "agent_message",
+          text: "Hello from Codex",
+        },
+      })}\n`,
+    );
+
+    parser.end();
+
+    expect(logEvents).toEqual([
+      { type: "session-start" },
+      {
+        type: "tool-use",
+        callId: "cmd_1",
+        toolName: "command_execution",
+        input: "ls",
+      },
+      {
+        type: "tool-result",
+        callId: "cmd_1",
+        toolName: "command_execution",
+        result: {
+          id: "cmd_1",
+          type: "command_execution",
+          exit_code: 0,
+          stdout: "out",
+          stderr: "",
+        },
+        isError: false,
+      },
+      { type: "assistant-text", text: "Hello from Codex" },
+    ]);
   });
 });
 
