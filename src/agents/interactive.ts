@@ -136,9 +136,6 @@ export async function buildInteractiveLaunchPlan(
       await writeFile(mcpJsonPath, JSON.stringify(mcpConfig, null, 2));
       args.push("--mcp-config", mcpJsonPath);
     }
-
-    // TODO: Add an init command that installs orchestrator skills into each
-    // agent's native skill directory instead of passing them at launch time.
   }
 
   return {
