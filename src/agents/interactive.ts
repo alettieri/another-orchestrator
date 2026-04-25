@@ -1,13 +1,15 @@
 import { spawn } from "node:child_process";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import type { AgentConfig, OrchestratorConfig } from "../core/types.js";
+import { type PreparedMcpLaunch, prepareMcpLaunch } from "./mcp.js";
 
 interface InteractiveLaunchPlanBase {
   agentName: string;
   args: string[];
   cwd: string;
   env: Record<string, string>;
+  warnings: string[];
 }
 
 export interface SubprocessInteractiveLaunchPlan
@@ -46,17 +48,6 @@ export interface BuildInteractiveLaunchPlanOptions {
   cwd: string;
   env: Record<string, string>;
 }
-
-type ClaudeMcpConfig = {
-  mcpServers: Record<
-    string,
-    {
-      command: string;
-      args: string[];
-      env?: Record<string, string>;
-    }
-  >;
-};
 
 export interface PlanOptions {
   repo: string;
@@ -97,24 +88,30 @@ export async function buildInteractiveLaunchPlan(
   const provider =
     basename(opts.agentConfig.command).toLowerCase() ||
     opts.agentName.toLowerCase();
+  const mcpLaunch = await prepareMcpLaunch({
+    config: opts.config,
+    provider,
+    cwd: opts.cwd,
+  });
 
   if (opts.agentName === "claude" || provider === "claude") {
-    return buildClaudeInteractiveLaunchPlan(opts);
+    return buildClaudeInteractiveLaunchPlan(opts, mcpLaunch);
   }
 
   if (opts.agentName === "codex" || provider === "codex") {
-    return buildGenericInteractiveLaunchPlan(opts);
+    return buildGenericInteractiveLaunchPlan(opts, mcpLaunch.warnings);
   }
 
   if (opts.agentName === "pi" || provider === "pi") {
-    return buildPiInteractiveLaunchPlan(opts);
+    return buildPiInteractiveLaunchPlan(opts, mcpLaunch.warnings);
   }
 
-  return buildGenericInteractiveLaunchPlan(opts);
+  return buildGenericInteractiveLaunchPlan(opts, mcpLaunch.warnings);
 }
 
 async function buildClaudeInteractiveLaunchPlan(
   opts: BuildInteractiveLaunchPlanOptions,
+  mcpLaunch: PreparedMcpLaunch,
 ): Promise<SubprocessInteractiveLaunchPlan> {
   const args = [...opts.agentConfig.defaultArgs];
 
@@ -126,31 +123,7 @@ async function buildClaudeInteractiveLaunchPlan(
     // No system prompt file -- proceed without it.
   }
 
-  const mcpServers = opts.config.mcpServers;
-  if (mcpServers && Object.keys(mcpServers).length > 0) {
-    const mcpConfig: ClaudeMcpConfig = { mcpServers: {} };
-    for (const [name, server] of Object.entries(mcpServers)) {
-      const entry: ClaudeMcpConfig["mcpServers"][string] = {
-        command: server.command,
-        args: server.args,
-      };
-      if (server.env) {
-        entry.env = {};
-        for (const [key, value] of Object.entries(server.env)) {
-          entry.env[key] = value.replace(/\$\{(\w+)\}/g, (_match, varName) => {
-            return process.env[varName] ?? "";
-          });
-        }
-      }
-      mcpConfig.mcpServers[name] = entry;
-    }
-
-    const mcpJsonDir = join(opts.cwd, ".claude");
-    const mcpJsonPath = join(mcpJsonDir, "mcp.json");
-    await mkdir(mcpJsonDir, { recursive: true });
-    await writeFile(mcpJsonPath, JSON.stringify(mcpConfig, null, 2));
-    args.push("--mcp-config", mcpJsonPath);
-  }
+  args.push(...mcpLaunch.launchData.args);
 
   args.push("--add-dir", opts.config.skillsDir);
 
@@ -161,11 +134,13 @@ async function buildClaudeInteractiveLaunchPlan(
     args,
     cwd: opts.cwd,
     env: opts.env,
+    warnings: mcpLaunch.warnings,
   };
 }
 
 function buildPiInteractiveLaunchPlan(
   opts: BuildInteractiveLaunchPlanOptions,
+  warnings: string[],
 ): InProcessInteractiveLaunchPlan {
   return {
     mode: "in-process",
@@ -174,11 +149,13 @@ function buildPiInteractiveLaunchPlan(
     args: [...opts.agentConfig.defaultArgs],
     cwd: opts.cwd,
     env: opts.env,
+    warnings,
   };
 }
 
 function buildGenericInteractiveLaunchPlan(
   opts: BuildInteractiveLaunchPlanOptions,
+  warnings: string[],
 ): SubprocessInteractiveLaunchPlan {
   return {
     mode: "subprocess",
@@ -187,6 +164,7 @@ function buildGenericInteractiveLaunchPlan(
     args: [...opts.agentConfig.defaultArgs],
     cwd: opts.cwd,
     env: opts.env,
+    warnings,
   };
 }
 

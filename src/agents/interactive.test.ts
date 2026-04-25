@@ -177,6 +177,7 @@ describe("buildInteractiveLaunchPlan", () => {
       command: "claude",
       cwd: repoDir,
       env: { ORCHESTRATOR_MODE: "plan" },
+      warnings: [],
     });
     expect(plan.args).toContain("--verbose");
     expect(plan.args).toEqual(
@@ -221,6 +222,7 @@ describe("buildInteractiveLaunchPlan", () => {
       args: ["--model", "gpt-5.2"],
       cwd: repoDir,
       env: { ORCHESTRATOR_MODE: "plan" },
+      warnings: [],
     });
     expect(plan.args).not.toContain("--append-system-prompt");
     expect(plan.args).not.toContain("--add-dir");
@@ -245,6 +247,7 @@ describe("buildInteractiveLaunchPlan", () => {
       args: ["--debug"],
       cwd: "/repo",
       env: { ORCHESTRATOR_MODE: "plan" },
+      warnings: [],
     });
     expect(plan.mode === "in-process" ? plan.runner : undefined).toEqual(
       expect.any(Function),
@@ -267,7 +270,28 @@ describe("buildInteractiveLaunchPlan", () => {
       args: ["--interactive"],
       cwd: "/repo",
       env: { ORCHESTRATOR_MODE: "plan" },
+      warnings: [],
     });
+  });
+
+  it("returns MCP warnings from unsupported providers", async () => {
+    const plan = await buildInteractiveLaunchPlan({
+      agentName: "codex",
+      agentConfig: { command: "codex", defaultArgs: [] },
+      config: {
+        ...mockConfig,
+        mcpServers: {
+          linear: { command: "linear-mcp", args: [] },
+        },
+      },
+      cwd: "/repo",
+      env: { ORCHESTRATOR_MODE: "plan" },
+    });
+
+    expect(plan.args).toEqual([]);
+    expect(plan.warnings).toEqual([
+      'MCP servers are not supported for provider "codex"',
+    ]);
   });
 
   it("keeps the shared plan env identical across launchers", async () => {
@@ -356,6 +380,7 @@ describe("spawnInteractive", () => {
         ORCHESTRATOR_MODE: "plan",
         TRANSIENT_IN_PROCESS_VAR: "set",
       },
+      warnings: [],
       runner: async ({ args, cwd, env }) => {
         expect(args).toEqual(["--debug"]);
         expect(cwd).toBe(repoDir);
