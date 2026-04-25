@@ -38,6 +38,26 @@ type ClaudeMcpConfig = {
   >;
 };
 
+function isTranslatableServer(server: NormalizedMcpServer): boolean {
+  return server.command.trim().length > 0;
+}
+
+function skippedServerWarning(
+  provider: string,
+  server: NormalizedMcpServer,
+  reason: string,
+): string {
+  return `Skipping MCP server "${server.name}" for provider "${provider}": ${reason}`;
+}
+
+function toTomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+function toTomlKeySegment(value: string): string {
+  return /^[A-Za-z0-9_-]+$/.test(value) ? value : toTomlString(value);
+}
+
 export function normalizeMcpServers(
   config: OrchestratorConfig,
   env: NodeJS.ProcessEnv = process.env,
@@ -76,8 +96,16 @@ export async function prepareMcpLaunch(
 
   if (opts.provider === "claude") {
     const mcpConfig: ClaudeMcpConfig = { mcpServers: {} };
+    const warnings: string[] = [];
 
     for (const server of servers) {
+      if (!isTranslatableServer(server)) {
+        warnings.push(
+          skippedServerWarning(opts.provider, server, "command is required"),
+        );
+        continue;
+      }
+
       const entry: ClaudeMcpConfig["mcpServers"][string] = {
         command: server.command,
         args: server.args,
@@ -86,6 +114,14 @@ export async function prepareMcpLaunch(
         entry.env = server.env;
       }
       mcpConfig.mcpServers[server.name] = entry;
+    }
+
+    if (Object.keys(mcpConfig.mcpServers).length === 0) {
+      return {
+        servers,
+        launchData: emptyLaunchData,
+        warnings,
+      };
     }
 
     const mcpJsonDir = join(opts.cwd, ".claude");
@@ -99,7 +135,44 @@ export async function prepareMcpLaunch(
         args: ["--mcp-config", mcpJsonPath],
         artifactPaths: [mcpJsonPath],
       },
-      warnings: [],
+      warnings,
+    };
+  }
+
+  if (opts.provider === "codex") {
+    const args: string[] = [];
+    const warnings: string[] = [];
+
+    for (const server of servers) {
+      if (!isTranslatableServer(server)) {
+        warnings.push(
+          skippedServerWarning(opts.provider, server, "command is required"),
+        );
+        continue;
+      }
+
+      const serverKey = `mcp_servers.${toTomlKeySegment(server.name)}`;
+      args.push("-c", `${serverKey}.command=${toTomlString(server.command)}`);
+      args.push(
+        "-c",
+        `${serverKey}.args=[${server.args.map(toTomlString).join(", ")}]`,
+      );
+
+      for (const [key, value] of Object.entries(server.env ?? {})) {
+        args.push(
+          "-c",
+          `${serverKey}.env.${toTomlKeySegment(key)}=${toTomlString(value)}`,
+        );
+      }
+    }
+
+    return {
+      servers,
+      launchData: {
+        args,
+        artifactPaths: [],
+      },
+      warnings,
     };
   }
 

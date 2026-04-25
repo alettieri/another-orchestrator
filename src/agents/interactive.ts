@@ -99,7 +99,10 @@ export async function buildInteractiveLaunchPlan(
   }
 
   if (opts.agentName === "codex" || provider === "codex") {
-    return buildGenericInteractiveLaunchPlan(opts, mcpLaunch.warnings);
+    return buildGenericInteractiveLaunchPlan(opts, mcpLaunch.warnings, [
+      ...opts.agentConfig.defaultArgs,
+      ...mcpLaunch.launchData.args,
+    ]);
   }
 
   if (opts.agentName === "pi" || provider === "pi") {
@@ -156,12 +159,13 @@ function buildPiInteractiveLaunchPlan(
 function buildGenericInteractiveLaunchPlan(
   opts: BuildInteractiveLaunchPlanOptions,
   warnings: string[],
+  args = [...opts.agentConfig.defaultArgs],
 ): SubprocessInteractiveLaunchPlan {
   return {
     mode: "subprocess",
     agentName: opts.agentName,
     command: opts.agentConfig.command,
-    args: [...opts.agentConfig.defaultArgs],
+    args,
     cwd: opts.cwd,
     env: opts.env,
     warnings,

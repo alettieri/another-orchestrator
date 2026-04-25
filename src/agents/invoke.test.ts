@@ -62,6 +62,61 @@ describe("buildAgentArgs", () => {
     expect(result.args).toEqual(["exec", "--json", "refactor code", "--quiet"]);
   });
 
+  it("includes provider-specific MCP launch args for codex", () => {
+    const result = buildAgentArgs(
+      { command: "codex", defaultArgs: ["--quiet"] },
+      {
+        prompt: "refactor code",
+        mcpLaunch: {
+          servers: [],
+          launchData: {
+            args: ["-c", 'mcp_servers.linear.command="linear-mcp"'],
+            artifactPaths: [],
+          },
+          warnings: [],
+        },
+      },
+    );
+
+    expect(result.args).toEqual([
+      "-c",
+      'mcp_servers.linear.command="linear-mcp"',
+      "exec",
+      "--json",
+      "refactor code",
+      "--quiet",
+    ]);
+  });
+
+  it("includes provider-specific MCP launch args for claude", () => {
+    const result = buildAgentArgs(
+      { command: "claude", defaultArgs: ["--model", "opus"] },
+      {
+        prompt: "hello",
+        mcpLaunch: {
+          servers: [],
+          launchData: {
+            args: ["--mcp-config", "/repo/.claude/mcp.json"],
+            artifactPaths: ["/repo/.claude/mcp.json"],
+          },
+          warnings: [],
+        },
+      },
+    );
+
+    expect(result.args).toEqual([
+      "-p",
+      "hello",
+      "--output-format",
+      "stream-json",
+      "--verbose",
+      "--model",
+      "opus",
+      "--mcp-config",
+      "/repo/.claude/mcp.json",
+    ]);
+  });
+
   it("builds args for unknown agent", () => {
     const result = buildAgentArgs(
       { command: "my-agent", defaultArgs: ["--flag"] },

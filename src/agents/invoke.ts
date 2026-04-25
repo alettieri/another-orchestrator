@@ -1,12 +1,15 @@
+import { basename } from "node:path";
 import type { SessionLogEventInput } from "../core/sessionLogWriter.js";
 import type { AgentConfig, AgentSession, JsonValue } from "../core/types.js";
 import { execCommandStreaming } from "../utils/shell.js";
+import type { PreparedMcpLaunch } from "./mcp.js";
 
 export interface AgentInvocation {
   prompt: string;
   cwd?: string;
   allowedTools?: string[];
   timeoutMs?: number;
+  mcpLaunch?: PreparedMcpLaunch;
 }
 
 export interface AgentResult {
@@ -32,14 +35,20 @@ interface StreamParser {
   readonly finalText: string | undefined;
 }
 
+function getAgentProvider(agentConfig: AgentConfig): string {
+  return basename(agentConfig.command).toLowerCase();
+}
+
 export function buildAgentArgs(
   agentConfig: AgentConfig,
   invocation: AgentInvocation,
 ): { command: string; args: string[] } {
   const { command, defaultArgs } = agentConfig;
   const { prompt, allowedTools } = invocation;
+  const provider = getAgentProvider(agentConfig);
+  const mcpArgs = invocation.mcpLaunch?.launchData.args ?? [];
 
-  if (command === "claude") {
+  if (provider === "claude") {
     const args = [
       "-p",
       prompt,
@@ -47,6 +56,7 @@ export function buildAgentArgs(
       "stream-json",
       "--verbose",
       ...defaultArgs,
+      ...mcpArgs,
     ];
     if (allowedTools?.length) {
       args.push("--allowedTools", ...allowedTools);
@@ -54,8 +64,8 @@ export function buildAgentArgs(
     return { command, args };
   }
 
-  if (command === "codex") {
-    const args = ["exec", "--json", prompt, ...defaultArgs];
+  if (provider === "codex") {
+    const args = [...mcpArgs, "exec", "--json", prompt, ...defaultArgs];
     return { command, args };
   }
 
@@ -327,13 +337,17 @@ export async function invokeAgent(
   options?: { signal?: AbortSignal },
 ): Promise<AgentResult> {
   const { command, args } = buildAgentArgs(agentConfig, invocation);
+  for (const warning of invocation.mcpLaunch?.warnings ?? []) {
+    console.warn(warning);
+  }
+  const provider = getAgentProvider(agentConfig);
   const parser =
-    agentConfig.command === "claude"
+    provider === "claude"
       ? createClaudeStreamParser({
           onSession: callbacks?.onSession,
           onSessionLogEvent: callbacks?.onSessionLogEvent,
         })
-      : agentConfig.command === "codex"
+      : provider === "codex"
         ? createCodexStreamParser({
             onSession: callbacks?.onSession,
             onSessionLogEvent: callbacks?.onSessionLogEvent,
@@ -355,7 +369,7 @@ export async function invokeAgent(
   parser?.end();
 
   if (
-    agentConfig.command === "codex" &&
+    provider === "codex" &&
     result.exitCode === 0 &&
     parser?.session === undefined
   ) {

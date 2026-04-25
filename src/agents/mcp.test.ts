@@ -140,6 +140,66 @@ describe("prepareMcpLaunch", () => {
     ).rejects.toThrow();
   });
 
+  it("renders Codex MCP launch args", async () => {
+    const repoDir = await createTempDir();
+    const result = await prepareMcpLaunch({
+      config: {
+        ...mockConfig,
+        mcpServers: {
+          "linear-prod": {
+            command: "linear-mcp",
+            args: ["--stdio"],
+            env: { TOKEN: "$" + "{MCP_TOKEN}" },
+          },
+        },
+      },
+      provider: "codex",
+      cwd: repoDir,
+      env: { MCP_TOKEN: "secret-token" },
+    });
+
+    expect(result.launchData).toEqual({
+      args: [
+        "-c",
+        'mcp_servers.linear-prod.command="linear-mcp"',
+        "-c",
+        'mcp_servers.linear-prod.args=["--stdio"]',
+        "-c",
+        'mcp_servers.linear-prod.env.TOKEN="secret-token"',
+      ],
+      artifactPaths: [],
+    });
+    expect(result.warnings).toEqual([]);
+    await expect(
+      access(join(repoDir, ".claude", "mcp.json")),
+    ).rejects.toThrow();
+  });
+
+  it("skips untranslatable servers with provider-specific warnings", async () => {
+    const repoDir = await createTempDir();
+    const result = await prepareMcpLaunch({
+      config: {
+        ...mockConfig,
+        mcpServers: {
+          broken: { command: "", args: [] },
+          linear: { command: "linear-mcp", args: [] },
+        },
+      },
+      provider: "codex",
+      cwd: repoDir,
+    });
+
+    expect(result.launchData.args).toEqual([
+      "-c",
+      'mcp_servers.linear.command="linear-mcp"',
+      "-c",
+      "mcp_servers.linear.args=[]",
+    ]);
+    expect(result.warnings).toEqual([
+      'Skipping MCP server "broken" for provider "codex": command is required',
+    ]);
+  });
+
   it("returns a warning and no launch data for unsupported providers", async () => {
     const repoDir = await createTempDir();
     const result = await prepareMcpLaunch({
@@ -149,16 +209,13 @@ describe("prepareMcpLaunch", () => {
           linear: { command: "linear-mcp", args: [] },
         },
       },
-      provider: "codex",
+      provider: "gemini",
       cwd: repoDir,
     });
 
     expect(result.launchData).toEqual({ args: [], artifactPaths: [] });
     expect(result.warnings).toEqual([
-      'MCP servers are not supported for provider "codex"',
+      'MCP servers are not supported for provider "gemini"',
     ]);
-    await expect(
-      access(join(repoDir, ".claude", "mcp.json")),
-    ).rejects.toThrow();
   });
 });

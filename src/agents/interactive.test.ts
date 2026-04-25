@@ -207,23 +207,43 @@ describe("buildInteractiveLaunchPlan", () => {
 
   it("uses Codex-specific subprocess planning without Claude-only setup", async () => {
     const repoDir = await createTempDir();
+    process.env.MCP_TOKEN = "secret-token";
+
     const plan = await buildInteractiveLaunchPlan({
       agentName: "codex",
       agentConfig: { command: "codex", defaultArgs: ["--model", "gpt-5.2"] },
-      config: mockConfig,
+      config: {
+        ...mockConfig,
+        mcpServers: {
+          linear: {
+            command: "linear-mcp",
+            args: ["--stdio"],
+            env: { TOKEN: "$" + "{MCP_TOKEN}" },
+          },
+        },
+      },
       cwd: repoDir,
       env: { ORCHESTRATOR_MODE: "plan" },
     });
 
-    expect(plan).toEqual({
+    expect(plan).toMatchObject({
       mode: "subprocess",
       agentName: "codex",
       command: "codex",
-      args: ["--model", "gpt-5.2"],
       cwd: repoDir,
       env: { ORCHESTRATOR_MODE: "plan" },
       warnings: [],
     });
+    expect(plan.args).toEqual([
+      "--model",
+      "gpt-5.2",
+      "-c",
+      'mcp_servers.linear.command="linear-mcp"',
+      "-c",
+      'mcp_servers.linear.args=["--stdio"]',
+      "-c",
+      'mcp_servers.linear.env.TOKEN="secret-token"',
+    ]);
     expect(plan.args).not.toContain("--append-system-prompt");
     expect(plan.args).not.toContain("--add-dir");
     expect(plan.args).not.toContain("--mcp-config");
@@ -276,8 +296,8 @@ describe("buildInteractiveLaunchPlan", () => {
 
   it("returns MCP warnings from unsupported providers", async () => {
     const plan = await buildInteractiveLaunchPlan({
-      agentName: "codex",
-      agentConfig: { command: "codex", defaultArgs: [] },
+      agentName: "gemini",
+      agentConfig: { command: "gemini", defaultArgs: [] },
       config: {
         ...mockConfig,
         mcpServers: {
@@ -290,7 +310,7 @@ describe("buildInteractiveLaunchPlan", () => {
 
     expect(plan.args).toEqual([]);
     expect(plan.warnings).toEqual([
-      'MCP servers are not supported for provider "codex"',
+      'MCP servers are not supported for provider "gemini"',
     ]);
   });
 

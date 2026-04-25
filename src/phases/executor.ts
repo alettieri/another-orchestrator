@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { invokeAgent } from "../agents/invoke.js";
+import { prepareMcpLaunch } from "../agents/mcp.js";
 import { resolveAgent } from "../core/config.js";
 import {
   createSessionLogWriter,
@@ -168,15 +169,25 @@ export function createPhaseExecutor(
 
     log.info(`Invoking agent "${agentName}"`);
 
+    const cwd = resolveCwd(ticket);
+    const provider =
+      basename(agentConfig.command).toLowerCase() || agentName.toLowerCase();
+    const mcpLaunch = await prepareMcpLaunch({
+      config,
+      provider,
+      cwd: cwd ?? process.cwd(),
+    });
+
     const agentResult = await invokeAgent(
       agentConfig,
       {
         prompt,
-        cwd: resolveCwd(ticket),
+        cwd,
         allowedTools: phase.allowedTools,
         timeoutMs: phase.timeoutSeconds
           ? phase.timeoutSeconds * 1000
           : undefined,
+        mcpLaunch,
       },
       {
         onOutput: (chunk) => log.trace(chunk),
