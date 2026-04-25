@@ -79,7 +79,7 @@ pollInterval: 10        # seconds between daemon ticks (default: 10)
 maxConcurrency: 3       # max concurrent tickets (default: 3)
 ghCommand: gh           # path to GitHub CLI (default: "gh")
 
-# Optional: MCP servers passed to the interactive agent
+# Optional: MCP servers passed to supported interactive launchers
 mcpServers:
   linear:
     command: npx
@@ -92,7 +92,7 @@ mcpServers:
 
 ### `defaultAgent` (string, required)
 
-The agent name used when no override is specified at the plan, ticket, or phase level. Must match a key in `agents`.
+The agent name used when no override is specified. `orchestrator interactive` uses this agent unless launched with `--agent <name>`; runner execution uses it when no phase, ticket, or plan agent override is set. Must match a key in `agents`.
 
 ### `agents` (object, required)
 
@@ -102,6 +102,8 @@ Map of agent name to agent config. Each agent has:
 |-------|------|-------------|
 | `command` | string | CLI command to invoke (e.g., `"claude"`, `"codex"`) |
 | `defaultArgs` | string[] | Arguments always passed to this agent |
+
+The same configured agents are used by both interactive planning and runner execution. For interactive planning, Claude has provider-specific setup, PI-style agents use the in-process launcher, and Codex or other configured agents use the generic subprocess launcher.
 
 ### `stateDir` (string, optional)
 
@@ -141,7 +143,7 @@ Path or name of the GitHub CLI. Default: `"gh"`.
 
 ### `mcpServers` (object, optional)
 
-MCP servers to make available during interactive sessions. Each entry:
+MCP servers to make available to supported interactive launchers. The current Claude interactive launcher writes these into Claude's MCP config before launch. Each entry:
 
 | Field | Type | Description |
 |-------|------|-------------|

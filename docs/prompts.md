@@ -128,9 +128,9 @@ Asks the agent to address PR review feedback and CI failures. Checks review comm
 
 ### `interactive-system.md`
 
-**Used by:** `orchestrator interactive` command for Claude planning sessions
+**Used by:** `orchestrator interactive` when the selected agent uses the Claude launcher
 
-System prompt injected into Claude interactive planning sessions. Not a workflow template — this defines the agent's role as the orchestrator's planning agent. Other providers may receive the shared planning environment without this Claude-specific prompt injection.
+System prompt injected into Claude interactive planning sessions. Not a workflow template — this defines the agent's role as the orchestrator's planning agent. Other configured agents receive the shared planning environment without this Claude-specific prompt injection; PI-style agents use the in-process launcher.
 
 ## Writing Custom Templates
 

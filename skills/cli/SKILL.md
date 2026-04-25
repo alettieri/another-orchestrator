@@ -28,7 +28,7 @@ All commands accept `-C, --config <path>` to use a specific config file instead 
 
 | Command | Description |
 |---------|-------------|
-| `orchestrator interactive [--repo <path>] [--workflow <name>] [--worktree-root <path>] [--agent <name>]` | Launch an interactive planning session with the configured default agent or an explicit agent override. `--repo` sets the target workspace (default: CWD). `--workflow` sets the default workflow for new plans. |
+| `orchestrator interactive [--repo <path>] [--workflow <name>] [--worktree-root <path>] [--agent <name>]` | Launch an interactive planning session. Uses `defaultAgent` from config unless `--agent <name>` selects another configured agent. `--repo` sets the target workspace (default: CWD). `--workflow` sets the default workflow for new plans. |
 
 ### Execution
 
@@ -66,10 +66,21 @@ All commands accept `-C, --config <path>` to use a specific config file instead 
 
 ```sh
 orchestrator init          # creates ~/.orchestrator/ with config, state, logs
-orchestrator interactive   # launch planning session from your workspace
+orchestrator interactive                 # launch with config defaultAgent
+orchestrator interactive --agent codex   # launch with a configured agent override
 # ... create plans interactively ...
 orchestrator daemon        # start processing tickets
 ```
+
+### Choosing the Interactive Agent
+
+`orchestrator interactive` uses `defaultAgent` unless `--agent <name>` selects another configured agent for this planning session only.
+
+Launcher behavior is provider-aware:
+
+- Claude uses the Claude subprocess launcher with Claude-specific prompt, MCP, and skills setup.
+- Codex and other configured agents use a generic subprocess launcher with the shared planning environment.
+- PI-style agents use the in-process interactive launcher.
 
 ### Check Progress
 
