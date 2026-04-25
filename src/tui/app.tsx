@@ -65,7 +65,7 @@ const TICKET_LOGS_HOTKEYS: Hotkey[] = [
 function countRunning(ticketsByPlan: Map<string, TicketState[]>): number {
   return Array.from(ticketsByPlan.values()).reduce(
     (count, tickets) =>
-      count + tickets.filter((t) => t.status === "running").length,
+      count + tickets.filter((t) => t.status === "running" || t.status === 'ready').length,
     0,
   );
 }
