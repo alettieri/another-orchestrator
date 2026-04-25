@@ -6,7 +6,7 @@ A lightweight CLI tool for autonomous software development. An LLM planner organ
 
 The orchestrator runs as two separate processes that communicate through JSON files on disk:
 
-1. **Planner** (`orchestrator interactive`) -- launches an interactive PI coding agent session where you describe the work. The agent reasons about tickets, dependencies, and priorities, then writes plan and ticket state files. PI runs from your current directory (e.g., a workspace with multiple repos) and discovers target repos interactively.
+1. **Planner** (`orchestrator interactive`) -- launches a configured interactive planning agent where you describe the work. The agent reasons about tickets, dependencies, and priorities, then writes plan and ticket state files. The session runs from your current directory (e.g., a workspace with multiple repos) and discovers target repos interactively.
 2. **Runner** (`orchestrator daemon`) -- a deterministic state machine that reads those state files, walks YAML workflow phase graphs, and dispatches headless coding agents (Claude Code, Codex, or others) as subprocesses in isolated git worktrees.
 
 The `state/plans/` directory is the only interface between the two. The planner writes JSON. The runner reads and updates it. They never call each other directly and don't need to run at the same time. Both commands work from any directory after a global install.
@@ -17,8 +17,7 @@ The `state/plans/` directory is the only interface between the two. The planner 
 - **pnpm** package manager
 - **git**
 - **gh** CLI (GitHub CLI, for PR operations)
-- A coding agent CLI: **claude** (Claude Code) and/or **codex** (OpenAI Codex)
-- The PI coding agent (`@mariozechner/pi-coding-agent`) is installed automatically as a dependency
+- A coding agent CLI: **claude** (Claude Code), **codex** (OpenAI Codex), PI, or another configured agent
 
 ## Getting Started
 
@@ -35,7 +34,7 @@ orchestrator init
 
 ### The Interactive Agent
 
-The primary interface is `orchestrator interactive`. It launches an LLM-powered planning session (PI) where you describe what you want done in natural language. The agent knows how to create plans, manage configuration, explore your workspace, author workflows, and connect to project management tools like Linear, GitHub Issues, or filesystem issue files.
+The primary interface is `orchestrator interactive`. It launches an LLM-powered planning session with the configured default agent, or an agent selected with `--agent`, where you describe what you want done in natural language. The agent knows how to create plans, manage configuration, explore your workspace, author workflows, and connect to project management tools like Linear, GitHub Issues, or filesystem issue files.
 
 Run it from your workspace directory (the root where your repos live):
 
@@ -70,7 +69,7 @@ All commands accept `-C, --config <path>` to use a specific config file.
 | Command | Description |
 |---------|-------------|
 | `orchestrator init [--dir <path>]` | Create `~/.orchestrator/` with default config, state, and logs dirs |
-| `orchestrator interactive [--repo <path>] [--workflow <name>]` | Launch interactive PI planning session (defaults to CWD) |
+| `orchestrator interactive [--repo <path>] [--workflow <name>] [--worktree-root <path>] [--agent <name>]` | Launch an interactive planning session (defaults to CWD and `defaultAgent`) |
 | `orchestrator status [--plan <id>] [--json]` | Show plan and ticket status |
 | `orchestrator run <planId> <ticketId>` | Run a single ticket through its workflow (blocks until done) |
 | `orchestrator daemon [--concurrency <n>] [--agent <name>]` | Start the daemon loop to process tickets continuously |
@@ -91,7 +90,7 @@ All commands accept `-C, --config <path>` to use a specific config file.
 ```
 Planner (interactive)          Runner (daemon)
   Human describes work    -->    Reads state files
-  PI agent reasons        -->    Walks YAML workflows
+  Agent reasons           -->    Walks YAML workflows
   Writes plan JSON        -->    Dispatches coding agents
          \                          /
           \__ state/plans/ ________/

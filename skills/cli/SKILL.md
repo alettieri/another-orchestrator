@@ -28,7 +28,7 @@ All commands accept `-C, --config <path>` to use a specific config file instead 
 
 | Command | Description |
 |---------|-------------|
-| `orchestrator interactive [--repo <path>] [--workflow <name>] [--worktree-root <path>]` | Launch an interactive PI session for planning and configuration. `--repo` sets the target workspace (default: CWD). `--workflow` sets the default workflow for new plans. |
+| `orchestrator interactive [--repo <path>] [--workflow <name>] [--worktree-root <path>] [--agent <name>]` | Launch an interactive planning session with the configured default agent or an explicit agent override. `--repo` sets the target workspace (default: CWD). `--workflow` sets the default workflow for new plans. |
 
 ### Execution
 

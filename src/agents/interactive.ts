@@ -1,12 +1,20 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import {
-  type AgentConfig,
-  type OrchestratorConfig,
-  type SupportedAgentName,
-  SupportedAgentNameSchema,
-} from "../core/types.js";
+import type { AgentConfig, OrchestratorConfig } from "../core/types.js";
+
+interface InteractiveLaunchPlanBase {
+  agentName: string;
+  args: string[];
+  cwd: string;
+  env: Record<string, string>;
+}
+
+export interface SubprocessInteractiveLaunchPlan
+  extends InteractiveLaunchPlanBase {
+  mode: "subprocess";
+  command: string;
+}
 
 export interface SpawnInteractiveOptions {
   command: string;
@@ -15,20 +23,29 @@ export interface SpawnInteractiveOptions {
   env?: Record<string, string>;
 }
 
-export interface InteractiveLaunchPlan extends SpawnInteractiveOptions {
-  agentName: SupportedAgentName;
+export type InProcessInteractiveRunner = (opts: {
+  args: string[];
+  cwd: string;
+  env: Record<string, string>;
+}) => Promise<void>;
+
+export interface InProcessInteractiveLaunchPlan
+  extends InteractiveLaunchPlanBase {
+  mode: "in-process";
+  runner: InProcessInteractiveRunner;
 }
 
+export type InteractiveLaunchPlan =
+  | SubprocessInteractiveLaunchPlan
+  | InProcessInteractiveLaunchPlan;
+
 export interface BuildInteractiveLaunchPlanOptions {
-  agentName: SupportedAgentName;
+  agentName: string;
   agentConfig: AgentConfig;
   config: OrchestratorConfig;
   cwd: string;
   env: Record<string, string>;
 }
-
-export const SUPPORTED_INTERACTIVE_AGENT_NAMES =
-  SupportedAgentNameSchema.options;
 
 type ClaudeMcpConfig = {
   mcpServers: Record<
@@ -74,71 +91,71 @@ export function buildPlanEnv(
   return env;
 }
 
-export function parseSupportedInteractiveAgentName(
-  agentName: string,
-): SupportedAgentName {
-  const result = SupportedAgentNameSchema.safeParse(agentName);
-  if (!result.success) {
-    throw new Error(
-      `Interactive agent "${agentName}" is not supported. Supported agents: ${SUPPORTED_INTERACTIVE_AGENT_NAMES.join(", ")}`,
-    );
-  }
-  return result.data;
-}
-
 export async function buildInteractiveLaunchPlan(
   opts: BuildInteractiveLaunchPlanOptions,
 ): Promise<InteractiveLaunchPlan> {
-  const args = [...opts.agentConfig.defaultArgs];
+  const provider =
+    basename(opts.agentConfig.command).toLowerCase() ||
+    opts.agentName.toLowerCase();
 
-  if (
-    opts.agentName === "claude" ||
-    basename(opts.agentConfig.command) === "claude"
-  ) {
-    const systemPromptPath = join(
-      opts.config.promptDir,
-      "interactive-system.md",
-    );
-    try {
-      const systemPrompt = await readFile(systemPromptPath, "utf-8");
-      args.push("--append-system-prompt", systemPrompt);
-    } catch {
-      // No system prompt file -- proceed without it.
-    }
-
-    if (
-      opts.config.mcpServers &&
-      Object.keys(opts.config.mcpServers).length > 0
-    ) {
-      const mcpConfig: ClaudeMcpConfig = { mcpServers: {} };
-      for (const [name, server] of Object.entries(opts.config.mcpServers)) {
-        const entry: ClaudeMcpConfig["mcpServers"][string] = {
-          command: server.command,
-          args: server.args,
-        };
-        if (server.env) {
-          entry.env = {};
-          for (const [key, value] of Object.entries(server.env)) {
-            entry.env[key] = value.replace(
-              /\$\{(\w+)\}/g,
-              (_match, varName) => {
-                return process.env[varName] ?? "";
-              },
-            );
-          }
-        }
-        mcpConfig.mcpServers[name] = entry;
-      }
-
-      const mcpJsonDir = join(opts.cwd, ".claude");
-      const mcpJsonPath = join(mcpJsonDir, "mcp.json");
-      await mkdir(mcpJsonDir, { recursive: true });
-      await writeFile(mcpJsonPath, JSON.stringify(mcpConfig, null, 2));
-      args.push("--mcp-config", mcpJsonPath);
-    }
+  if (opts.agentName === "claude" || provider === "claude") {
+    return buildClaudeInteractiveLaunchPlan(opts);
   }
 
+  if (opts.agentName === "codex" || provider === "codex") {
+    return buildGenericInteractiveLaunchPlan(opts);
+  }
+
+  if (opts.agentName === "pi" || provider === "pi") {
+    return buildPiInteractiveLaunchPlan(opts);
+  }
+
+  return buildGenericInteractiveLaunchPlan(opts);
+}
+
+async function buildClaudeInteractiveLaunchPlan(
+  opts: BuildInteractiveLaunchPlanOptions,
+): Promise<SubprocessInteractiveLaunchPlan> {
+  const args = [...opts.agentConfig.defaultArgs];
+
+  const systemPromptPath = join(opts.config.promptDir, "interactive-system.md");
+  try {
+    const systemPrompt = await readFile(systemPromptPath, "utf-8");
+    args.push("--append-system-prompt", systemPrompt);
+  } catch {
+    // No system prompt file -- proceed without it.
+  }
+
+  const mcpServers = opts.config.mcpServers;
+  if (mcpServers && Object.keys(mcpServers).length > 0) {
+    const mcpConfig: ClaudeMcpConfig = { mcpServers: {} };
+    for (const [name, server] of Object.entries(mcpServers)) {
+      const entry: ClaudeMcpConfig["mcpServers"][string] = {
+        command: server.command,
+        args: server.args,
+      };
+      if (server.env) {
+        entry.env = {};
+        for (const [key, value] of Object.entries(server.env)) {
+          entry.env[key] = value.replace(/\$\{(\w+)\}/g, (_match, varName) => {
+            return process.env[varName] ?? "";
+          });
+        }
+      }
+      mcpConfig.mcpServers[name] = entry;
+    }
+
+    const mcpJsonDir = join(opts.cwd, ".claude");
+    const mcpJsonPath = join(mcpJsonDir, "mcp.json");
+    await mkdir(mcpJsonDir, { recursive: true });
+    await writeFile(mcpJsonPath, JSON.stringify(mcpConfig, null, 2));
+    args.push("--mcp-config", mcpJsonPath);
+  }
+
+  args.push("--add-dir", opts.config.skillsDir);
+
   return {
+    mode: "subprocess",
     agentName: opts.agentName,
     command: opts.agentConfig.command,
     args,
@@ -147,17 +164,104 @@ export async function buildInteractiveLaunchPlan(
   };
 }
 
-export function spawnInteractive(
-  opts: SpawnInteractiveOptions,
+function buildPiInteractiveLaunchPlan(
+  opts: BuildInteractiveLaunchPlanOptions,
+): InProcessInteractiveLaunchPlan {
+  return {
+    mode: "in-process",
+    agentName: opts.agentName,
+    runner: runPiInteractive,
+    args: [...opts.agentConfig.defaultArgs],
+    cwd: opts.cwd,
+    env: opts.env,
+  };
+}
+
+function buildGenericInteractiveLaunchPlan(
+  opts: BuildInteractiveLaunchPlanOptions,
+): SubprocessInteractiveLaunchPlan {
+  return {
+    mode: "subprocess",
+    agentName: opts.agentName,
+    command: opts.agentConfig.command,
+    args: [...opts.agentConfig.defaultArgs],
+    cwd: opts.cwd,
+    env: opts.env,
+  };
+}
+
+export async function runPiInteractive(opts: {
+  args: string[];
+}): Promise<void> {
+  const dynamicImport = new Function(
+    "specifier",
+    "return import(specifier)",
+  ) as (specifier: string) => Promise<Record<string, unknown>>;
+  const pi = await dynamicImport("@mariozechner/pi-coding-agent");
+  const runner = pi.runInteractive ?? pi.interactive ?? pi.main ?? pi.default;
+
+  if (typeof runner !== "function") {
+    throw new Error(
+      "PI interactive module does not export runInteractive, interactive, main, or default",
+    );
+  }
+
+  await runner(opts.args);
+}
+
+export async function spawnInteractive(
+  opts: InteractiveLaunchPlan | SpawnInteractiveOptions,
 ): Promise<number> {
+  if ("mode" in opts && opts.mode === "in-process") {
+    return runInProcessInteractive(opts);
+  }
+
+  const subprocessOpts =
+    "mode" in opts
+      ? opts
+      : {
+          mode: "subprocess" as const,
+          agentName: basename(opts.command),
+          command: opts.command,
+          args: opts.args,
+          cwd: opts.cwd ?? process.cwd(),
+          env: opts.env ?? {},
+        };
+
   return new Promise((resolve, reject) => {
-    const child = spawn(opts.command, opts.args, {
-      cwd: opts.cwd,
-      env: { ...process.env, ...opts.env },
+    const child = spawn(subprocessOpts.command, subprocessOpts.args, {
+      cwd: subprocessOpts.cwd,
+      env: { ...process.env, ...subprocessOpts.env },
       stdio: "inherit",
     });
 
     child.on("error", reject);
     child.on("close", (code) => resolve(code ?? 1));
   });
+}
+
+async function runInProcessInteractive(
+  opts: InProcessInteractiveLaunchPlan,
+): Promise<number> {
+  const originalCwd = process.cwd();
+  const originalEnv = { ...process.env };
+
+  try {
+    process.chdir(opts.cwd);
+    Object.assign(process.env, opts.env);
+    await opts.runner({
+      args: opts.args,
+      cwd: opts.cwd,
+      env: opts.env,
+    });
+    return 0;
+  } finally {
+    process.chdir(originalCwd);
+    for (const key of Object.keys(process.env)) {
+      if (!(key in originalEnv)) {
+        delete process.env[key];
+      }
+    }
+    Object.assign(process.env, originalEnv);
+  }
 }

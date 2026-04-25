@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -6,7 +13,6 @@ import type { OrchestratorConfig } from "../core/types.js";
 import {
   buildInteractiveLaunchPlan,
   buildPlanEnv,
-  parseSupportedInteractiveAgentName,
   spawnInteractive,
 } from "./interactive.js";
 
@@ -133,19 +139,6 @@ describe("buildPlanEnv", () => {
   });
 });
 
-describe("parseSupportedInteractiveAgentName", () => {
-  it("returns supported interactive agent names", () => {
-    expect(parseSupportedInteractiveAgentName("claude")).toBe("claude");
-    expect(parseSupportedInteractiveAgentName("codex")).toBe("codex");
-  });
-
-  it("rejects unsupported interactive agent names", () => {
-    expect(() => parseSupportedInteractiveAgentName("gemini")).toThrow(
-      'Interactive agent "gemini" is not supported',
-    );
-  });
-});
-
 describe("buildInteractiveLaunchPlan", () => {
   it("preserves Claude interactive setup behind a launcher", async () => {
     const repoDir = await createTempDir();
@@ -179,6 +172,7 @@ describe("buildInteractiveLaunchPlan", () => {
     });
 
     expect(plan).toMatchObject({
+      mode: "subprocess",
       agentName: "claude",
       command: "claude",
       cwd: repoDir,
@@ -189,9 +183,10 @@ describe("buildInteractiveLaunchPlan", () => {
       expect.arrayContaining([
         "--append-system-prompt",
         "You are the planning agent.",
+        "--add-dir",
+        "/abs/skills",
       ]),
     );
-    expect(plan.args).not.toContain("--add-dir");
 
     const mcpConfigIndex = plan.args.indexOf("--mcp-config");
     expect(mcpConfigIndex).toBeGreaterThan(-1);
@@ -209,22 +204,109 @@ describe("buildInteractiveLaunchPlan", () => {
     });
   });
 
-  it("uses a generic subprocess launch plan for non-Claude agents", async () => {
+  it("uses Codex-specific subprocess planning without Claude-only setup", async () => {
+    const repoDir = await createTempDir();
     const plan = await buildInteractiveLaunchPlan({
       agentName: "codex",
       agentConfig: { command: "codex", defaultArgs: ["--model", "gpt-5.2"] },
+      config: mockConfig,
+      cwd: repoDir,
+      env: { ORCHESTRATOR_MODE: "plan" },
+    });
+
+    expect(plan).toEqual({
+      mode: "subprocess",
+      agentName: "codex",
+      command: "codex",
+      args: ["--model", "gpt-5.2"],
+      cwd: repoDir,
+      env: { ORCHESTRATOR_MODE: "plan" },
+    });
+    expect(plan.args).not.toContain("--append-system-prompt");
+    expect(plan.args).not.toContain("--add-dir");
+    expect(plan.args).not.toContain("--mcp-config");
+    await expect(
+      access(join(repoDir, ".claude", "mcp.json")),
+    ).rejects.toThrow();
+  });
+
+  it("returns an in-process launch plan for PI-style agents", async () => {
+    const plan = await buildInteractiveLaunchPlan({
+      agentName: "pi",
+      agentConfig: { command: "pi", defaultArgs: ["--debug"] },
+      config: mockConfig,
+      cwd: "/repo",
+      env: { ORCHESTRATOR_MODE: "plan" },
+    });
+
+    expect(plan).toMatchObject({
+      mode: "in-process",
+      agentName: "pi",
+      args: ["--debug"],
+      cwd: "/repo",
+      env: { ORCHESTRATOR_MODE: "plan" },
+    });
+    expect(plan.mode === "in-process" ? plan.runner : undefined).toEqual(
+      expect.any(Function),
+    );
+  });
+
+  it("uses a generic subprocess fallback for unknown configured agents", async () => {
+    const plan = await buildInteractiveLaunchPlan({
+      agentName: "gemini",
+      agentConfig: { command: "gemini", defaultArgs: ["--interactive"] },
       config: mockConfig,
       cwd: "/repo",
       env: { ORCHESTRATOR_MODE: "plan" },
     });
 
     expect(plan).toEqual({
-      agentName: "codex",
-      command: "codex",
-      args: ["--model", "gpt-5.2"],
+      mode: "subprocess",
+      agentName: "gemini",
+      command: "gemini",
+      args: ["--interactive"],
       cwd: "/repo",
       env: { ORCHESTRATOR_MODE: "plan" },
     });
+  });
+
+  it("keeps the shared plan env identical across launchers", async () => {
+    const env = buildPlanEnv(mockConfig, {
+      repo: "/repo",
+      workflow: "standard",
+      worktreeRoot: "/worktrees",
+      configPath: "/cfg/config.yaml",
+    });
+    const common = {
+      config: mockConfig,
+      cwd: "/repo",
+      env,
+    };
+
+    const plans = await Promise.all([
+      buildInteractiveLaunchPlan({
+        ...common,
+        agentName: "claude",
+        agentConfig: { command: "claude", defaultArgs: [] },
+      }),
+      buildInteractiveLaunchPlan({
+        ...common,
+        agentName: "codex",
+        agentConfig: { command: "codex", defaultArgs: [] },
+      }),
+      buildInteractiveLaunchPlan({
+        ...common,
+        agentName: "pi",
+        agentConfig: { command: "pi", defaultArgs: [] },
+      }),
+      buildInteractiveLaunchPlan({
+        ...common,
+        agentName: "custom",
+        agentConfig: { command: "custom", defaultArgs: [] },
+      }),
+    ]);
+
+    expect(plans.map((plan) => plan.env)).toEqual([env, env, env, env]);
   });
 });
 
@@ -255,5 +337,38 @@ describe("spawnInteractive", () => {
     });
 
     expect(code).toBe(0);
+  });
+
+  it("runs in-process launchers with cwd and env restoration", async () => {
+    const repoDir = await createTempDir();
+    const realRepoDir = await realpath(repoDir);
+    const originalCwd = process.cwd();
+    const originalEnv = process.env.ORCHESTRATOR_MODE;
+    const originalTransient = process.env.TRANSIENT_IN_PROCESS_VAR;
+    delete process.env.TRANSIENT_IN_PROCESS_VAR;
+
+    const code = await spawnInteractive({
+      mode: "in-process",
+      agentName: "pi",
+      args: ["--debug"],
+      cwd: repoDir,
+      env: {
+        ORCHESTRATOR_MODE: "plan",
+        TRANSIENT_IN_PROCESS_VAR: "set",
+      },
+      runner: async ({ args, cwd, env }) => {
+        expect(args).toEqual(["--debug"]);
+        expect(cwd).toBe(repoDir);
+        expect(env.ORCHESTRATOR_MODE).toBe("plan");
+        expect(process.cwd()).toBe(realRepoDir);
+        expect(process.env.ORCHESTRATOR_MODE).toBe("plan");
+        expect(process.env.TRANSIENT_IN_PROCESS_VAR).toBe("set");
+      },
+    });
+
+    expect(code).toBe(0);
+    expect(process.cwd()).toBe(originalCwd);
+    expect(process.env.ORCHESTRATOR_MODE).toBe(originalEnv);
+    expect(process.env.TRANSIENT_IN_PROCESS_VAR).toBe(originalTransient);
   });
 });
