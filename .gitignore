@@ -5,11 +5,9 @@ logs/
 *.log
 .DS_Store
 .pi/
-skills/.claude/
+.claude/skills
+.agents/skills
 .claude/skills/*
-!.claude/skills/vercel-react-best-practices
 .agents/skills/*
-!.agents/skills/vercel-react-best-practices/
-!.agents/skills/vercel-react-best-practices/**
 orchestrator.yaml
 .vitest_tmp

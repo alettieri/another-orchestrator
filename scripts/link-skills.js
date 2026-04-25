@@ -12,11 +12,10 @@ import { fileURLToPath } from "node:url";
 const rootDir = resolve(fileURLToPath(import.meta.url), "../..");
 const skillsSrc = join(rootDir, "skills");
 const repoClaudeTargetDir = join(rootDir, ".claude", "skills");
-const claudeTargetDir = join(skillsSrc, ".claude", "skills");
 const agentsTargetDir = join(rootDir, ".agents", "skills");
 const managedSkills = [];
 
-for (const targetDir of [repoClaudeTargetDir, claudeTargetDir, agentsTargetDir]) {
+for (const targetDir of [repoClaudeTargetDir, agentsTargetDir]) {
   await mkdir(targetDir, { recursive: true });
 }
 
@@ -64,7 +63,7 @@ async function collectSkills(srcDir, prefix = "") {
 
 async function removeManagedLinks() {
   for (const { skillName } of managedSkills) {
-    for (const targetDir of [repoClaudeTargetDir, claudeTargetDir, agentsTargetDir]) {
+    for (const targetDir of [repoClaudeTargetDir, agentsTargetDir]) {
       const linkPath = join(targetDir, skillName);
       try {
         const stat = await lstat(linkPath);
@@ -86,13 +85,12 @@ async function removeManagedLinks() {
 }
 
 console.log(
-  "Linking skills into .claude/skills/, skills/.claude/skills/, and .agents/skills/",
+  "Linking skills into .claude/skills/ and .agents/skills/",
 );
 await collectSkills(skillsSrc);
 await removeManagedLinks();
 for (const { skillName, fullPath } of managedSkills) {
   await createLink(repoClaudeTargetDir, skillName, fullPath);
-  await createLink(claudeTargetDir, skillName, fullPath);
   await createLink(agentsTargetDir, skillName, fullPath);
 }
 console.log("Done.");
