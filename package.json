@@ -25,6 +25,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@mariozechner/pi-coding-agent": "^0.70.2",
     "@sinclair/typebox": "^0.34.48",
     "@tanstack/react-query": "^5.99.1",
     "chalk": "^5.4.1",
