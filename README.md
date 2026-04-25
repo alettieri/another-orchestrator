@@ -34,7 +34,7 @@ orchestrator init
 
 ### The Interactive Agent
 
-The primary interface is `orchestrator interactive`. It launches an LLM-powered planning session with the configured default agent, or an agent selected with `--agent`, where you describe what you want done in natural language. The agent knows how to create plans, manage configuration, explore your workspace, author workflows, and connect to project management tools like Linear, GitHub Issues, or filesystem issue files.
+The primary planning entrypoint is `orchestrator interactive`. It launches an LLM-powered planning session with `defaultAgent` from your config, or with another configured agent selected by `--agent`. The planning agent can create plans, manage configuration, explore your workspace, author workflows, and connect to project management tools like Linear, GitHub Issues, or filesystem issue files.
 
 Run it from your workspace directory (the root where your repos live):
 
@@ -42,6 +42,14 @@ Run it from your workspace directory (the root where your repos live):
 cd ~/workspace
 orchestrator interactive
 ```
+
+To use a different configured agent for this planning session only:
+
+```sh
+orchestrator interactive --agent codex
+```
+
+Launcher behavior depends on the selected provider: Claude receives Claude-specific prompt, MCP, and skills setup; PI-style agents run through the in-process launcher; Codex and other configured agents run as subprocesses with the shared planning environment.
 
 The agent writes plan and ticket state files that the execution engine consumes. You don't need to edit JSON by hand -- the agent handles it.
 
@@ -69,7 +77,7 @@ All commands accept `-C, --config <path>` to use a specific config file.
 | Command | Description |
 |---------|-------------|
 | `orchestrator init [--dir <path>]` | Create `~/.orchestrator/` with default config, state, and logs dirs |
-| `orchestrator interactive [--repo <path>] [--workflow <name>] [--worktree-root <path>] [--agent <name>]` | Launch an interactive planning session (defaults to CWD and `defaultAgent`) |
+| `orchestrator interactive [--repo <path>] [--workflow <name>] [--worktree-root <path>] [--agent <name>]` | Launch a planning session. Uses CWD for `--repo` and `defaultAgent` unless overridden. |
 | `orchestrator status [--plan <id>] [--json]` | Show plan and ticket status |
 | `orchestrator run <planId> <ticketId>` | Run a single ticket through its workflow (blocks until done) |
 | `orchestrator daemon [--concurrency <n>] [--agent <name>]` | Start the daemon loop to process tickets continuously |
@@ -177,7 +185,7 @@ src/
     runner.ts                 # State machine engine + daemon loop
   agents/
     invoke.ts                 # Agent abstraction (Claude / Codex)
-    interactive.ts            # Interactive PI integration (calls library directly)
+    interactive.ts            # Provider-aware interactive launcher
   phases/
     executor.ts               # Phase type handlers
   utils/
@@ -191,7 +199,7 @@ workflows/                    # YAML workflow definitions
   manual-pr.yaml              # Like standard, but waits for you to open the PR
 
 prompts/                      # Nunjucks templates for agent phases
-  interactive-system.md       # System prompt for PI interactive sessions
+  interactive-system.md       # System prompt injected for Claude interactive sessions
 scripts/                      # Bash scripts for infrastructure phases
 skills/                       # Agent Skills documentation
   cli/SKILL.md                # CLI command reference for interactive sessions
@@ -231,7 +239,7 @@ Config is created by `orchestrator init` at `~/.orchestrator/config.yaml`. The r
 Example config (directory fields are optional -- smart defaults apply):
 
 ```yaml
-defaultAgent: claude          # Global default coding agent
+defaultAgent: claude          # Global default agent for planning and execution
 
 agents:                       # Agent CLI definitions
   claude:
@@ -248,7 +256,7 @@ pollInterval: 10              # Seconds between daemon ticks
 maxConcurrency: 3             # Max tickets running across all plans
 ghCommand: gh                 # GitHub CLI binary
 
-mcpServers:                   # MCP servers for the PI planning session
+mcpServers:                   # MCP servers written for the Claude interactive launcher
   linear:
     command: npx
     args: ["-y", "mcp-remote", "https://mcp.linear.app/mcp"]
