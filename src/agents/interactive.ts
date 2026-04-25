@@ -1,7 +1,12 @@
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import type { AgentConfig, OrchestratorConfig } from "../core/types.js";
+import {
+  type AgentConfig,
+  type OrchestratorConfig,
+  type SupportedAgentName,
+  SupportedAgentNameSchema,
+} from "../core/types.js";
 
 export interface SpawnInteractiveOptions {
   command: string;
@@ -11,16 +16,19 @@ export interface SpawnInteractiveOptions {
 }
 
 export interface InteractiveLaunchPlan extends SpawnInteractiveOptions {
-  agentName: string;
+  agentName: SupportedAgentName;
 }
 
 export interface BuildInteractiveLaunchPlanOptions {
-  agentName: string;
+  agentName: SupportedAgentName;
   agentConfig: AgentConfig;
   config: OrchestratorConfig;
   cwd: string;
   env: Record<string, string>;
 }
+
+export const SUPPORTED_INTERACTIVE_AGENT_NAMES =
+  SupportedAgentNameSchema.options;
 
 type ClaudeMcpConfig = {
   mcpServers: Record<
@@ -64,6 +72,18 @@ export function buildPlanEnv(
   }
 
   return env;
+}
+
+export function parseSupportedInteractiveAgentName(
+  agentName: string,
+): SupportedAgentName {
+  const result = SupportedAgentNameSchema.safeParse(agentName);
+  if (!result.success) {
+    throw new Error(
+      `Interactive agent "${agentName}" is not supported. Supported agents: ${SUPPORTED_INTERACTIVE_AGENT_NAMES.join(", ")}`,
+    );
+  }
+  return result.data;
 }
 
 export async function buildInteractiveLaunchPlan(
@@ -117,7 +137,8 @@ export async function buildInteractiveLaunchPlan(
       args.push("--mcp-config", mcpJsonPath);
     }
 
-    args.push("--add-dir", opts.config.skillsDir);
+    // TODO: Add an init command that installs orchestrator skills into each
+    // agent's native skill directory instead of passing them at launch time.
   }
 
   return {

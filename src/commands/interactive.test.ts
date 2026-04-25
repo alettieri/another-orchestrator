@@ -51,6 +51,28 @@ async function writeConfig(dir: string): Promise<string> {
   return configPath;
 }
 
+async function writeUnsupportedAgentConfig(dir: string): Promise<string> {
+  const configPath = join(dir, "config.yaml");
+  await writeFile(
+    configPath,
+    [
+      "defaultAgent: gemini",
+      "agents:",
+      "  gemini:",
+      "    command: gemini",
+      "    defaultArgs: []",
+      `stateDir: ${JSON.stringify(join(dir, "state"))}`,
+      `logDir: ${JSON.stringify(join(dir, "logs"))}`,
+      `workflowDir: ${JSON.stringify(join(dir, "workflows"))}`,
+      `promptDir: ${JSON.stringify(join(dir, "prompts"))}`,
+      `scriptDir: ${JSON.stringify(join(dir, "scripts"))}`,
+      `skillsDir: ${JSON.stringify(join(dir, "skills"))}`,
+      "",
+    ].join("\n"),
+  );
+  return configPath;
+}
+
 function makeProgram(configPath: string): Command {
   const program = new Command();
   program.exitOverride();
@@ -110,9 +132,26 @@ describe("interactive command", () => {
       expect.objectContaining({
         agentName: "claude",
         command: "claude",
-        args: expect.arrayContaining(["--verbose", "--add-dir"]),
+        args: expect.arrayContaining(["--verbose"]),
       }),
     );
+    expect(mockSpawnInteractive.mock.calls[0]?.[0].args).not.toContain(
+      "--add-dir",
+    );
+  });
+
+  it("rejects configured agents that are not supported for interactive launch", async () => {
+    const dir = await createTempDir();
+    const configPath = await writeUnsupportedAgentConfig(dir);
+    const program = makeProgram(configPath);
+
+    await expect(
+      program.parseAsync(["node", "test", "interactive"], {
+        from: "node",
+      }),
+    ).rejects.toThrow('Interactive agent "gemini" is not supported');
+
+    expect(mockSpawnInteractive).not.toHaveBeenCalled();
   });
 
   it("describes interactive planning without Claude-only wording", () => {
@@ -127,6 +166,7 @@ describe("interactive command", () => {
       "Launch an interactive planning and configuration session",
     );
     expect(commandHelp).toContain("--agent <name>");
+    expect(commandHelp).toContain("claude or codex");
     expect(help).not.toContain("interactive Claude session");
   });
 });

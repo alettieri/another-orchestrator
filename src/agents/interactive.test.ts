@@ -6,6 +6,7 @@ import type { OrchestratorConfig } from "../core/types.js";
 import {
   buildInteractiveLaunchPlan,
   buildPlanEnv,
+  parseSupportedInteractiveAgentName,
   spawnInteractive,
 } from "./interactive.js";
 
@@ -132,6 +133,19 @@ describe("buildPlanEnv", () => {
   });
 });
 
+describe("parseSupportedInteractiveAgentName", () => {
+  it("returns supported interactive agent names", () => {
+    expect(parseSupportedInteractiveAgentName("claude")).toBe("claude");
+    expect(parseSupportedInteractiveAgentName("codex")).toBe("codex");
+  });
+
+  it("rejects unsupported interactive agent names", () => {
+    expect(() => parseSupportedInteractiveAgentName("gemini")).toThrow(
+      'Interactive agent "gemini" is not supported',
+    );
+  });
+});
+
 describe("buildInteractiveLaunchPlan", () => {
   it("preserves Claude interactive setup behind a launcher", async () => {
     const repoDir = await createTempDir();
@@ -175,10 +189,9 @@ describe("buildInteractiveLaunchPlan", () => {
       expect.arrayContaining([
         "--append-system-prompt",
         "You are the planning agent.",
-        "--add-dir",
-        "/abs/skills",
       ]),
     );
+    expect(plan.args).not.toContain("--add-dir");
 
     const mcpConfigIndex = plan.args.indexOf("--mcp-config");
     expect(mcpConfigIndex).toBeGreaterThan(-1);
