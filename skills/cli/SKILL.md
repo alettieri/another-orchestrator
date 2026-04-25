@@ -28,7 +28,7 @@ All commands accept `-C, --config <path>` to use a specific config file instead 
 
 | Command | Description |
 |---------|-------------|
-| `orchestrator interactive [--repo <path>] [--workflow <name>] [--worktree-root <path>] [--agent <name>]` | Launch an interactive planning session. Uses `defaultAgent` from config unless `--agent <name>` selects another configured agent. `--repo` sets the target workspace (default: CWD). `--workflow` sets the default workflow for new plans. |
+| `orchestrator interactive [--repo <path>] [--workflow <name>] [--worktree-root <path>] [--launcher <name>]` | Launch an interactive planning session. Uses `defaultAgent` from config unless `--launcher <name>` selects another configured launcher. `--repo` sets the target workspace (default: CWD). `--workflow` sets the default workflow for new plans. |
 
 ### Execution
 
@@ -67,14 +67,14 @@ All commands accept `-C, --config <path>` to use a specific config file instead 
 ```sh
 orchestrator init          # creates ~/.orchestrator/ with config, state, logs
 orchestrator interactive                 # launch with config defaultAgent
-orchestrator interactive --agent codex   # launch with a configured agent override
+orchestrator interactive --launcher codex   # launch with a configured launcher override
 # ... create plans interactively ...
 orchestrator daemon        # start processing tickets
 ```
 
-### Choosing the Interactive Agent
+### Choosing the Interactive Launcher
 
-`orchestrator interactive` uses `defaultAgent` unless `--agent <name>` selects another configured agent for this planning session only.
+`orchestrator interactive` uses `defaultAgent` unless `--launcher <name>` selects another configured launcher for this planning session only.
 
 Launcher behavior is provider-aware:
 

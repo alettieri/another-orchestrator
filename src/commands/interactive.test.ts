@@ -77,6 +77,7 @@ async function writeUnsupportedAgentConfig(dir: string): Promise<string> {
 function makeProgram(configPath: string): Command {
   const program = new Command();
   program.exitOverride();
+  program.configureOutput({ writeErr: () => {} });
   register(program, () => ({ configPath, packageDir: "/tmp/package" }));
   return program;
 }
@@ -97,7 +98,7 @@ describe("interactive command", () => {
     );
   });
 
-  it("uses defaultAgent when --agent is omitted", async () => {
+  it("uses defaultAgent when --launcher is omitted", async () => {
     const dir = await createTempDir();
     const configPath = await writeConfig(dir);
     const program = makeProgram(configPath);
@@ -113,16 +114,16 @@ describe("interactive command", () => {
         args: ["--model", "gpt-5.2"],
       }),
     );
-    expect(logSpy.mock.calls.flat()).toContain("  Agent: codex");
+    expect(logSpy.mock.calls.flat()).toContain("  Launcher: codex");
   });
 
-  it("lets --agent override defaultAgent", async () => {
+  it("lets --launcher override defaultAgent", async () => {
     const dir = await createTempDir();
     const configPath = await writeConfig(dir);
     const program = makeProgram(configPath);
 
     await program.parseAsync(
-      ["node", "test", "interactive", "--agent", "claude"],
+      ["node", "test", "interactive", "--launcher", "claude"],
       {
         from: "node",
       },
@@ -136,6 +137,18 @@ describe("interactive command", () => {
         args: expect.arrayContaining(["--verbose", "--add-dir"]),
       }),
     );
+  });
+
+  it("rejects the removed --agent option", async () => {
+    const program = makeProgram("/tmp/config.yaml");
+
+    await expect(
+      program.parseAsync(["node", "test", "interactive", "--agent", "claude"], {
+        from: "node",
+      }),
+    ).rejects.toThrow("error: unknown option '--agent'");
+
+    expect(mockSpawnInteractive).not.toHaveBeenCalled();
   });
 
   it("uses generic fallback for configured agents without built-in launchers", async () => {
@@ -168,8 +181,9 @@ describe("interactive command", () => {
     expect(help).toContain(
       "Launch an interactive planning and configuration session",
     );
-    expect(commandHelp).toContain("--agent <name>");
-    expect(commandHelp).toContain("Override default interactive agent");
+    expect(commandHelp).toContain("--launcher <name>");
+    expect(commandHelp).toContain("Override default interactive launcher");
+    expect(commandHelp).not.toContain("--agent <name>");
     expect(help).not.toContain("interactive Claude session");
   });
 });
