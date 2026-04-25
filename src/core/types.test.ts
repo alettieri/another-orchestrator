@@ -8,6 +8,7 @@ import {
   RawOrchestratorConfigSchema,
   SessionLogEventSchema,
   SessionLogEventTypeSchema,
+  SupportedAgentNameSchema,
   TicketStateSchema,
   TicketStatusSchema,
   WorkflowDefinitionSchema,
@@ -37,6 +38,18 @@ describe("AgentConfigSchema", () => {
 
   it("rejects missing defaultArgs", () => {
     expect(() => AgentConfigSchema.parse({ command: "claude" })).toThrow();
+  });
+});
+
+describe("SupportedAgentNameSchema", () => {
+  it("accepts supported agent providers", () => {
+    expect(SupportedAgentNameSchema.options).toEqual(["claude", "codex"]);
+    expect(SupportedAgentNameSchema.parse("claude")).toBe("claude");
+    expect(SupportedAgentNameSchema.parse("codex")).toBe("codex");
+  });
+
+  it("rejects unsupported agent providers", () => {
+    expect(() => SupportedAgentNameSchema.parse("gemini")).toThrow();
   });
 });
 

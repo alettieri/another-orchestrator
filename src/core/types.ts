@@ -17,6 +17,10 @@ export const McpServerConfigSchema = z.object({
 
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
 
+export const SupportedAgentNameSchema = z.enum(["claude", "codex"]);
+
+export type SupportedAgentName = z.infer<typeof SupportedAgentNameSchema>;
+
 // Raw schema: what the YAML config file contains (directory fields optional)
 export const RawOrchestratorConfigSchema = z.object({
   defaultAgent: z.string(),
@@ -90,7 +94,7 @@ export type PlanFile = z.infer<typeof PlanFileSchema>;
 export const AgentSessionSchema = z
   .object({
     id: z.string(),
-    provider: z.enum(["claude", "codex"]),
+    provider: SupportedAgentNameSchema,
   })
   .strict();
 
