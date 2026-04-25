@@ -19,6 +19,7 @@ import { spawnInteractive } from "../agents/interactive.js";
 
 const mockSpawnInteractive = vi.mocked(spawnInteractive);
 const tempDirs: string[] = [];
+const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
 async function createTempDir(): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "orchestrator-interactive-cmd-"));
@@ -81,8 +82,6 @@ function makeProgram(configPath: string): Command {
 }
 
 describe("interactive command", () => {
-  vi.spyOn(console, "log").mockImplementation(() => {});
-
   beforeEach(() => {
     process.exitCode = undefined;
     mockSpawnInteractive.mockResolvedValue(0);
@@ -114,6 +113,7 @@ describe("interactive command", () => {
         args: ["--model", "gpt-5.2"],
       }),
     );
+    expect(logSpy.mock.calls.flat()).toContain("  Agent: codex");
   });
 
   it("lets --agent override defaultAgent", async () => {
@@ -130,28 +130,31 @@ describe("interactive command", () => {
 
     expect(mockSpawnInteractive).toHaveBeenCalledWith(
       expect.objectContaining({
+        mode: "subprocess",
         agentName: "claude",
         command: "claude",
-        args: expect.arrayContaining(["--verbose"]),
+        args: expect.arrayContaining(["--verbose", "--add-dir"]),
       }),
-    );
-    expect(mockSpawnInteractive.mock.calls[0]?.[0].args).not.toContain(
-      "--add-dir",
     );
   });
 
-  it("rejects configured agents that are not supported for interactive launch", async () => {
+  it("uses generic fallback for configured agents without built-in launchers", async () => {
     const dir = await createTempDir();
     const configPath = await writeUnsupportedAgentConfig(dir);
     const program = makeProgram(configPath);
 
-    await expect(
-      program.parseAsync(["node", "test", "interactive"], {
-        from: "node",
-      }),
-    ).rejects.toThrow('Interactive agent "gemini" is not supported');
+    await program.parseAsync(["node", "test", "interactive"], {
+      from: "node",
+    });
 
-    expect(mockSpawnInteractive).not.toHaveBeenCalled();
+    expect(mockSpawnInteractive).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "subprocess",
+        agentName: "gemini",
+        command: "gemini",
+        args: [],
+      }),
+    );
   });
 
   it("describes interactive planning without Claude-only wording", () => {
@@ -166,7 +169,7 @@ describe("interactive command", () => {
       "Launch an interactive planning and configuration session",
     );
     expect(commandHelp).toContain("--agent <name>");
-    expect(commandHelp).toContain("claude or codex");
+    expect(commandHelp).toContain("Override default interactive agent");
     expect(help).not.toContain("interactive Claude session");
   });
 });
