@@ -92,7 +92,7 @@ mcpServers:
 
 ### `defaultAgent` (string, required)
 
-The agent name used when no override is specified. `orchestrator interactive` uses this agent unless launched with `--agent <name>`; runner execution uses it when no phase, ticket, or plan agent override is set. Must match a key in `agents`.
+The agent name used when no override is specified. `orchestrator interactive` uses this agent unless launched with `--launcher <name>`; runner execution uses it when no phase, ticket, or plan agent override is set. Must match a key in `agents`.
 
 ### `agents` (object, required)
 

@@ -20,13 +20,13 @@ export function register(
   program
     .command("interactive")
     .description("Launch an interactive planning and configuration session")
-    .option("-a, --agent <name>", "Override default interactive agent")
+    .option("--launcher <name>", "Override default interactive launcher")
     .option("-r, --repo <path>", "Target repository or workspace path")
     .option("-w, --workflow <name>", "Default workflow to use")
     .option("--worktree-root <path>", "Root directory for worktrees")
     .action(
       async (opts: {
-        agent?: string;
+        launcher?: string;
         repo?: string;
         workflow?: string;
         worktreeRoot?: string;
@@ -35,7 +35,7 @@ export function register(
         const config = await loadConfig(configOpts);
         const configPath = findConfigFile(configOpts.configPath);
 
-        const agentName = resolveAgent(config, opts.agent, null, null);
+        const agentName = resolveAgent(config, opts.launcher, null, null);
         const agentConfig = config.agents[agentName];
 
         const repoCwd = resolve(opts.repo ?? ".");
@@ -56,7 +56,7 @@ export function register(
         });
 
         console.log(chalk.bold("Launching interactive planning session..."));
-        console.log(chalk.dim(`  Agent: ${agentName}`));
+        console.log(chalk.dim(`  Launcher: ${agentName}`));
         console.log(chalk.dim(`  Mode: ${launchPlan.mode}`));
         console.log(chalk.dim(`  CWD: ${repoCwd}`));
         if (planEnv.ORCHESTRATOR_WORKFLOW) {

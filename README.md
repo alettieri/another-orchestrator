@@ -32,9 +32,9 @@ pnpm link --global
 orchestrator init
 ```
 
-### The Interactive Agent
+### The Interactive Launcher
 
-The primary planning entrypoint is `orchestrator interactive`. It launches an LLM-powered planning session with `defaultAgent` from your config, or with another configured agent selected by `--agent`. The planning agent can create plans, manage configuration, explore your workspace, author workflows, and connect to project management tools like Linear, GitHub Issues, or filesystem issue files.
+The primary planning entrypoint is `orchestrator interactive`. It launches an LLM-powered planning session with `defaultAgent` from your config, or with another configured launcher selected by `--launcher`. The planning agent can create plans, manage configuration, explore your workspace, author workflows, and connect to project management tools like Linear, GitHub Issues, or filesystem issue files.
 
 Run it from your workspace directory (the root where your repos live):
 
@@ -46,7 +46,7 @@ orchestrator interactive
 To use a different configured agent for this planning session only:
 
 ```sh
-orchestrator interactive --agent codex
+orchestrator interactive --launcher codex
 ```
 
 Launcher behavior depends on the selected provider: Claude receives Claude-specific prompt, MCP, and skills setup; PI-style agents run through the in-process launcher; Codex and other configured agents run as subprocesses with the shared planning environment.
@@ -77,7 +77,7 @@ All commands accept `-C, --config <path>` to use a specific config file.
 | Command | Description |
 |---------|-------------|
 | `orchestrator init [--dir <path>]` | Create `~/.orchestrator/` with default config, state, and logs dirs |
-| `orchestrator interactive [--repo <path>] [--workflow <name>] [--worktree-root <path>] [--agent <name>]` | Launch a planning session. Uses CWD for `--repo` and `defaultAgent` unless overridden. |
+| `orchestrator interactive [--repo <path>] [--workflow <name>] [--worktree-root <path>] [--launcher <name>]` | Launch a planning session. Uses CWD for `--repo` and `defaultAgent` unless overridden. |
 | `orchestrator status [--plan <id>] [--json]` | Show plan and ticket status |
 | `orchestrator run <planId> <ticketId>` | Run a single ticket through its workflow (blocks until done) |
 | `orchestrator daemon [--concurrency <n>] [--agent <name>]` | Start the daemon loop to process tickets continuously |
