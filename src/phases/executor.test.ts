@@ -16,6 +16,8 @@ import type {
 import type { Logger } from "../utils/logger.js";
 import { createPhaseExecutor } from "./executor.js";
 
+const originalMcpToken = process.env.MCP_TOKEN;
+
 function makeLogger(): Logger {
   return pino<"success">({
     level: "silent",
@@ -92,6 +94,11 @@ describe("executor", () => {
   });
 
   afterEach(async () => {
+    if (originalMcpToken === undefined) {
+      delete process.env.MCP_TOKEN;
+    } else {
+      process.env.MCP_TOKEN = originalMcpToken;
+    }
     await rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -306,6 +313,173 @@ describe("executor", () => {
       const result = await executor.execute(phase, ticket, null);
 
       expect(result.success).toBe(true);
+    });
+
+    it("runs unknown runner providers without MCP and warns", async () => {
+      await writeFile(join(promptDir, "unknown.md"), "hello");
+
+      config.agents.echo = { command: "echo", defaultArgs: [] };
+      config.mcpServers = {
+        linear: { command: "linear-mcp", args: [] },
+      };
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+      const phase: PhaseDefinition = {
+        id: "agent_phase",
+        type: "agent",
+        promptTemplate: "unknown.md",
+        agent: "echo",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+        onSuccess: "next",
+        onFailure: "fail",
+      };
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger);
+      try {
+        const result = await executor.execute(phase, makeTicket(), null);
+
+        expect(result.success).toBe(true);
+        expect(result.output.trim()).toBe("hello");
+        expect(warnSpy).toHaveBeenCalledWith(
+          'MCP servers are not supported for provider "echo"',
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it("passes shared MCP launch artifacts to runner-driven Codex phases", async () => {
+      await writeFile(join(promptDir, "codex.md"), "hello codex");
+
+      config.agents.codex = { command: "codex", defaultArgs: [] };
+      config.mcpServers = {
+        linear: {
+          command: "linear-mcp",
+          args: ["--stdio"],
+          env: { TOKEN: "$" + "{MCP_TOKEN}" },
+        },
+      };
+      process.env.MCP_TOKEN = "secret-token";
+
+      const invokeSpy = vi
+        .spyOn(invokeModule, "invokeAgent")
+        .mockResolvedValue({
+          stdout: "ok",
+          stderr: "",
+          exitCode: 0,
+          success: true,
+        } satisfies AgentResult);
+
+      const phase: PhaseDefinition = {
+        id: "agent_phase",
+        type: "agent",
+        promptTemplate: "codex.md",
+        agent: "codex",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+        onSuccess: "next",
+        onFailure: "fail",
+      };
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger);
+      try {
+        const result = await executor.execute(
+          phase,
+          makeTicket({ worktree: tmpDir }),
+          null,
+        );
+
+        expect(result.success).toBe(true);
+        expect(invokeSpy).toHaveBeenCalledWith(
+          { command: "codex", defaultArgs: [] },
+          expect.objectContaining({
+            mcpLaunch: expect.objectContaining({
+              launchData: {
+                args: [
+                  "-c",
+                  'mcp_servers.linear.command="linear-mcp"',
+                  "-c",
+                  'mcp_servers.linear.args=["--stdio"]',
+                  "-c",
+                  'mcp_servers.linear.env.TOKEN="secret-token"',
+                ],
+                artifactPaths: [],
+              },
+              warnings: [],
+            }),
+          }),
+          expect.any(Object),
+          expect.any(Object),
+        );
+      } finally {
+        invokeSpy.mockRestore();
+      }
+    });
+
+    it("passes shared MCP launch artifacts to runner-driven Claude phases", async () => {
+      await writeFile(join(promptDir, "claude.md"), "hello claude");
+
+      config.mcpServers = {
+        linear: {
+          command: "linear-mcp",
+          args: ["--stdio"],
+        },
+      };
+
+      const invokeSpy = vi
+        .spyOn(invokeModule, "invokeAgent")
+        .mockResolvedValue({
+          stdout: "ok",
+          stderr: "",
+          exitCode: 0,
+          success: true,
+        } satisfies AgentResult);
+
+      const phase: PhaseDefinition = {
+        id: "agent_phase",
+        type: "agent",
+        promptTemplate: "claude.md",
+        agent: "claude",
+        args: [],
+        maxRetries: 0,
+        notify: false,
+        onSuccess: "next",
+        onFailure: "fail",
+      };
+
+      const renderer = createTemplateRenderer(promptDir);
+      const executor = createPhaseExecutor(config, renderer, logger);
+      try {
+        const result = await executor.execute(
+          phase,
+          makeTicket({ worktree: tmpDir }),
+          null,
+        );
+
+        expect(result.success).toBe(true);
+        const invocation = invokeSpy.mock.calls[0][1];
+        const mcpConfigPath = join(tmpDir, ".claude", "mcp.json");
+        expect(invocation.mcpLaunch?.launchData).toEqual({
+          args: ["--mcp-config", mcpConfigPath],
+          artifactPaths: [mcpConfigPath],
+        });
+        expect(JSON.parse(await readFile(mcpConfigPath, "utf-8"))).toEqual({
+          mcpServers: {
+            linear: {
+              command: "linear-mcp",
+              args: ["--stdio"],
+            },
+          },
+        });
+      } finally {
+        invokeSpy.mockRestore();
+      }
     });
 
     it("returns failure when promptTemplate is missing", async () => {
