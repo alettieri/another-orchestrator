@@ -1,7 +1,13 @@
-import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import type { OrchestratorConfig } from "../core/types.js";
-import { buildPlanEnv, spawnInteractive } from "./interactive.js";
+import {
+  buildInteractiveLaunchPlan,
+  buildPlanEnv,
+  spawnInteractive,
+} from "./interactive.js";
 
 const mockConfig: OrchestratorConfig = {
   defaultAgent: "claude",
@@ -21,6 +27,26 @@ const mockConfig: OrchestratorConfig = {
   maxConcurrency: 3,
   ghCommand: "gh",
 };
+
+const tempDirs: string[] = [];
+const originalMcpToken = process.env.MCP_TOKEN;
+
+async function createTempDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "orchestrator-interactive-"));
+  tempDirs.push(dir);
+  return dir;
+}
+
+afterEach(async () => {
+  if (originalMcpToken === undefined) {
+    delete process.env.MCP_TOKEN;
+  } else {
+    process.env.MCP_TOKEN = originalMcpToken;
+  }
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })),
+  );
+});
 
 describe("buildPlanEnv", () => {
   it("includes required env vars", () => {
@@ -103,6 +129,89 @@ describe("buildPlanEnv", () => {
 
     expect(env.ORCHESTRATOR_REPO).toBe(resolve("./my-project"));
     expect(env.ORCHESTRATOR_REPO).toMatch(/^\//);
+  });
+});
+
+describe("buildInteractiveLaunchPlan", () => {
+  it("preserves Claude interactive setup behind a launcher", async () => {
+    const repoDir = await createTempDir();
+    const promptDir = await createTempDir();
+    await writeFile(
+      join(promptDir, "interactive-system.md"),
+      "You are the planning agent.",
+    );
+
+    process.env.MCP_TOKEN = "secret-token";
+
+    const config: OrchestratorConfig = {
+      ...mockConfig,
+      promptDir,
+      skillsDir: "/abs/skills",
+      mcpServers: {
+        linear: {
+          command: "linear-mcp",
+          args: ["--stdio"],
+          env: { TOKEN: "$" + "{MCP_TOKEN}" },
+        },
+      },
+    };
+
+    const plan = await buildInteractiveLaunchPlan({
+      agentName: "claude",
+      agentConfig: { command: "claude", defaultArgs: ["--verbose"] },
+      config,
+      cwd: repoDir,
+      env: { ORCHESTRATOR_MODE: "plan" },
+    });
+
+    expect(plan).toMatchObject({
+      agentName: "claude",
+      command: "claude",
+      cwd: repoDir,
+      env: { ORCHESTRATOR_MODE: "plan" },
+    });
+    expect(plan.args).toContain("--verbose");
+    expect(plan.args).toEqual(
+      expect.arrayContaining([
+        "--append-system-prompt",
+        "You are the planning agent.",
+        "--add-dir",
+        "/abs/skills",
+      ]),
+    );
+
+    const mcpConfigIndex = plan.args.indexOf("--mcp-config");
+    expect(mcpConfigIndex).toBeGreaterThan(-1);
+    const mcpConfigPath = plan.args[mcpConfigIndex + 1];
+    expect(mcpConfigPath).toBe(join(repoDir, ".claude", "mcp.json"));
+    const mcpConfig = JSON.parse(await readFile(mcpConfigPath, "utf-8"));
+    expect(mcpConfig).toEqual({
+      mcpServers: {
+        linear: {
+          command: "linear-mcp",
+          args: ["--stdio"],
+          env: { TOKEN: "secret-token" },
+        },
+      },
+    });
+  });
+
+  it("uses a generic subprocess launch plan for non-Claude agents", async () => {
+    const plan = await buildInteractiveLaunchPlan({
+      agentName: "codex",
+      agentConfig: { command: "codex", defaultArgs: ["--model", "gpt-5.2"] },
+      config: mockConfig,
+      cwd: "/repo",
+      env: { ORCHESTRATOR_MODE: "plan" },
+    });
+
+    expect(plan).toEqual({
+      agentName: "codex",
+      command: "codex",
+      args: ["--model", "gpt-5.2"],
+      cwd: "/repo",
+      env: { ORCHESTRATOR_MODE: "plan" },
+    });
   });
 });
 
