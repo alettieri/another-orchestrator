@@ -79,7 +79,7 @@ pollInterval: 10        # seconds between daemon ticks (default: 10)
 maxConcurrency: 3       # max concurrent tickets (default: 3)
 ghCommand: gh           # path to GitHub CLI (default: "gh")
 
-# Optional: MCP servers passed to supported interactive launchers
+# Optional: shared MCP servers translated for supported providers
 mcpServers:
   linear:
     command: npx
@@ -103,7 +103,7 @@ Map of agent name to agent config. Each agent has:
 | `command` | string | CLI command to invoke (e.g., `"claude"`, `"codex"`) |
 | `defaultArgs` | string[] | Arguments always passed to this agent |
 
-The same configured agents are used by both interactive planning and runner execution. For interactive planning, Claude has provider-specific setup, PI-style agents use the in-process launcher, and Codex or other configured agents use the generic subprocess launcher.
+The same configured agents are used by both interactive planning and runner execution. For interactive planning, Claude has provider-specific prompt and skills setup, PI-style agents use the in-process launcher, and Codex or other configured agents use the generic subprocess launcher. Claude and Codex can receive MCP servers from the shared `mcpServers` config.
 
 ### `stateDir` (string, optional)
 
@@ -143,7 +143,14 @@ Path or name of the GitHub CLI. Default: `"gh"`.
 
 ### `mcpServers` (object, optional)
 
-MCP servers to make available to supported interactive launchers. The current Claude interactive launcher writes these into Claude's MCP config before launch. Each entry:
+Shared MCP servers to make available to supported providers. This is the only MCP config surface users edit in orchestrator config; do not add provider-specific MCP config sections. The orchestrator translates each server for supported providers:
+
+- Claude gets a generated Claude MCP config file plus the Claude MCP launch flag.
+- Codex gets equivalent `mcp_servers` CLI configuration arguments.
+
+MCP is standardized, but provider CLIs do not all accept MCP configuration the same way. Claude and Codex are currently supported. Unsupported providers run without MCP and emit a warning. If one server cannot be translated for the selected provider, that server is skipped with a warning and any remaining translatable servers are still used.
+
+Each entry:
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -179,6 +186,8 @@ maxConcurrency: 5
 ```
 
 ### Adding an MCP Server
+
+Add MCP servers under the shared `mcpServers` key. Claude and Codex use the same entries for interactive planning or runner execution.
 
 ```yaml
 mcpServers:

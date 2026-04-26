@@ -49,7 +49,7 @@ To use a different configured agent for this planning session only:
 orchestrator interactive --launcher codex
 ```
 
-Launcher behavior depends on the selected provider: Claude receives Claude-specific prompt, MCP, and skills setup; PI-style agents run through the in-process launcher; Codex and other configured agents run as subprocesses with the shared planning environment.
+Launcher behavior depends on the selected provider: Claude receives Claude-specific prompt and skills setup; Claude and Codex receive MCP servers from the shared `mcpServers` config; PI-style agents run through the in-process launcher; other configured agents run as subprocesses with the shared planning environment.
 
 The agent writes plan and ticket state files that the execution engine consumes. You don't need to edit JSON by hand -- the agent handles it.
 
@@ -256,13 +256,22 @@ pollInterval: 10              # Seconds between daemon ticks
 maxConcurrency: 3             # Max tickets running across all plans
 ghCommand: gh                 # GitHub CLI binary
 
-mcpServers:                   # MCP servers written for the Claude interactive launcher
+mcpServers:                   # Shared MCP servers translated for Claude and Codex
   linear:
     command: npx
     args: ["-y", "mcp-remote", "https://mcp.linear.app/mcp"]
 ```
 
 Directory fields (`stateDir`, `logDir`, `workflowDir`, `promptDir`, `scriptDir`, `skillsDir`) can be set to override the defaults. Paths are resolved relative to the config file location.
+
+### MCP Servers
+
+`mcpServers` is the orchestrator's single provider-agnostic MCP configuration surface. Define servers there once, and the orchestrator translates them for supported providers:
+
+- **Claude** receives a generated Claude MCP config file and the matching Claude launch flag.
+- **Codex** receives equivalent `mcp_servers` CLI configuration arguments.
+
+MCP itself is standardized, but agent CLIs do not expose one universal configuration surface. Claude and Codex are currently supported; providers without a translator run without MCP and emit a warning. If one server cannot be translated for the selected provider, that server is skipped with a warning while the remaining translatable servers are still used.
 
 ### Custom Prompt Templates
 

@@ -78,9 +78,12 @@ orchestrator daemon        # start processing tickets
 
 Launcher behavior is provider-aware:
 
-- Claude uses the Claude subprocess launcher with Claude-specific prompt, MCP, and skills setup.
+- Claude uses the Claude subprocess launcher with Claude-specific prompt and skills setup.
+- Claude and Codex use MCP servers from the shared `mcpServers` config.
 - Codex and other configured agents use a generic subprocess launcher with the shared planning environment.
 - PI-style agents use the in-process interactive launcher.
+
+MCP itself is standardized, but provider launch/config surfaces differ. Providers without MCP translation support run without MCP and emit a warning. If one server cannot be translated for the selected provider, that server is skipped with a warning while any remaining servers are still passed through.
 
 ### Check Progress
 
