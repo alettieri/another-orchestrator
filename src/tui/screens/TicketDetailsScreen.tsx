@@ -72,38 +72,45 @@ export function TicketDetailsScreen({
   );
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" rowGap={1}>
       {visibleBlocks.map(({ block, visibleStart, visibleLineCount }) => {
         if (block.type === "description") {
           return (
-            <TicketDescriptionSection
-              key={block.key}
-              description={block.description}
-              width={block.width}
-              visibleStart={visibleStart}
-              visibleLineCount={visibleLineCount}
-            />
+            <Box key={block.key} flexDirection="column">
+              <TicketDescriptionSection
+                description={block.description}
+                width={block.width}
+                visibleStart={visibleStart}
+                visibleLineCount={visibleLineCount}
+              />
+            </Box>
           );
         }
 
         if (block.type === "acceptance-criteria") {
           return (
-            <TicketAcceptanceCriteriaSection
-              key={block.key}
-              acceptanceCriteria={block.acceptanceCriteria}
-              width={block.width}
-              visibleStart={visibleStart}
-              visibleLineCount={visibleLineCount}
-            />
+            <Box key={block.key} flexDirection="column">
+              <TicketAcceptanceCriteriaSection
+                acceptanceCriteria={block.acceptanceCriteria}
+                width={block.width}
+                visibleStart={visibleStart}
+                visibleLineCount={visibleLineCount}
+              />
+            </Box>
           );
         }
 
-        return block.lines
-          .slice(visibleStart, visibleStart + visibleLineCount)
-          .map((line, i) => (
-            <TicketDetailRow key={`${block.key}-${i}`} line={line} />
-          ));
+        return (
+          <Box flexDirection="column" key={block.key}>
+            {block.lines
+              .slice(visibleStart, visibleStart + visibleLineCount)
+              .map((line, i) => (
+                <TicketDetailRow key={`${block.key}-${i}`} line={line} />
+              ))}
+          </Box>
+        );
       })}
+
       {hasOverflow && (
         <Text dimColor>
           {`↑↓ ${scrollOffset + effectiveViewport}/${totalLines}`.padStart(

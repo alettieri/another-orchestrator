@@ -156,13 +156,13 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
 
   const breadcrumbPath = useMemo(() => {
     if (currentScreen.type === "ticket-logs" && selectedPlan) {
-      return ["Plans", selectedPlan.name, `${currentScreen.ticketId} · logs`];
+      return ["Plans", selectedPlan.id, `${currentScreen.ticketId} · logs`];
     }
     if (currentScreen.type === "ticket-details" && selectedPlan) {
-      return ["Plans", selectedPlan.name, currentScreen.ticketId];
+      return ["Plans", selectedPlan.id, currentScreen.ticketId];
     }
     if (currentScreen.type === "tickets" && selectedPlan) {
-      return ["Plans", selectedPlan.name];
+      return ["Plans", selectedPlan.id];
     }
     return ["Plans"];
   }, [currentScreen, selectedPlan]);
@@ -180,7 +180,7 @@ function AppInner({ stateManager, stateDir, workflowLoader }: AppProps) {
     <Box flexDirection="column" height={terminalHeight}>
       <Header planCount={plans.length} runningCount={runningCount} />
       <Breadcrumb path={breadcrumbPath} />
-      <Box flexDirection="column" flexGrow={1}>
+      <Box flexDirection="column" flexGrow={1} marginY={1}>
         {currentScreen.type === "ticket-logs" && selectedTicket ? (
           <TicketLogsScreen
             ticket={selectedTicket}
