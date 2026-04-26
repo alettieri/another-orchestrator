@@ -38,6 +38,10 @@ function makeTicket({
   };
 }
 
+async function waitForRender(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
+
 // ─── buildDetailLines ─────────────────────────────────────────────────────────
 
 describe("buildDetailLines", () => {
@@ -345,5 +349,44 @@ describe("TicketDetailsScreen", () => {
     });
     expect(frame0()).toContain("Unique title for scroll test");
     u0();
+  });
+
+  it("scrolls to the end of a long description", async () => {
+    const ticket = makeTicket({
+      description: `${"description word ".repeat(40)}tail-marker`,
+      acceptanceCriteria: [],
+    });
+    const { lastFrame, stdin, unmount } = renderScreen({
+      ticket,
+      height: 8,
+      width: 30,
+    });
+
+    expect(lastFrame()).not.toContain("tail-marker");
+    stdin.write("G");
+    await waitForRender();
+    expect(lastFrame()).toContain("tail-marker");
+    unmount();
+  });
+
+  it("scrolls to the end of a long criteria list", async () => {
+    const ticket = makeTicket({
+      description: "Short description",
+      acceptanceCriteria: Array.from(
+        { length: 12 },
+        (_, i) => `Criterion ${i + 1} tail`,
+      ),
+    });
+    const { lastFrame, stdin, unmount } = renderScreen({
+      ticket,
+      height: 8,
+      width: 80,
+    });
+
+    expect(lastFrame()).not.toContain("Criterion 12 tail");
+    stdin.write("G");
+    await waitForRender();
+    expect(lastFrame()).toContain("12. Criterion 12 tail");
+    unmount();
   });
 });

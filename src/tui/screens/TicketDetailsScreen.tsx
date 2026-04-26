@@ -2,10 +2,13 @@ import { Box, Text, useInput } from "ink";
 import type React from "react";
 import { useState } from "react";
 import type { TicketState } from "../../core/types.js";
+import { TicketAcceptanceCriteriaSection } from "../components/TicketAcceptanceCriteriaSection.js";
+import { TicketDescriptionSection } from "../components/TicketDescriptionSection.js";
 import { TicketDetailRow } from "../components/TicketDetailRow.js";
 import {
-  buildDetailLines,
+  buildDetailBlocks,
   clampScrollOffset,
+  getVisibleDetailBlocks,
 } from "./TicketDetailsScreen.helpers.js";
 
 interface TicketDetailsScreenProps {
@@ -21,8 +24,11 @@ export function TicketDetailsScreen({
 }: TicketDetailsScreenProps): React.ReactElement {
   const [scrollOffset, setScrollOffset] = useState(0);
 
-  const allLines = buildDetailLines(ticket, width);
-  const totalLines = allLines.length;
+  const blocks = buildDetailBlocks(ticket, width);
+  const totalLines = blocks.reduce(
+    (total, block) => total + block.lineCount,
+    0,
+  );
   const hasOverflow = totalLines > height;
   const effectiveViewport = hasOverflow ? height - 1 : height;
   const maxOffset = Math.max(0, totalLines - effectiveViewport);
@@ -59,17 +65,45 @@ export function TicketDetailsScreen({
     });
   });
 
-  const visibleLines = allLines.slice(
+  const visibleBlocks = getVisibleDetailBlocks(
+    blocks,
     scrollOffset,
-    scrollOffset + effectiveViewport,
+    effectiveViewport,
   );
 
   return (
     <Box flexDirection="column">
-      {visibleLines.map((line, i) => (
-        // biome-ignore lint/suspicious/noArrayIndexKey: lines have no stable identity; order is fixed
-        <TicketDetailRow key={i} line={line} />
-      ))}
+      {visibleBlocks.map(({ block, visibleStart, visibleLineCount }) => {
+        if (block.type === "description") {
+          return (
+            <TicketDescriptionSection
+              key={block.key}
+              description={block.description}
+              width={block.width}
+              visibleStart={visibleStart}
+              visibleLineCount={visibleLineCount}
+            />
+          );
+        }
+
+        if (block.type === "acceptance-criteria") {
+          return (
+            <TicketAcceptanceCriteriaSection
+              key={block.key}
+              acceptanceCriteria={block.acceptanceCriteria}
+              width={block.width}
+              visibleStart={visibleStart}
+              visibleLineCount={visibleLineCount}
+            />
+          );
+        }
+
+        return block.lines
+          .slice(visibleStart, visibleStart + visibleLineCount)
+          .map((line, i) => (
+            <TicketDetailRow key={`${block.key}-${i}`} line={line} />
+          ));
+      })}
       {hasOverflow && (
         <Text dimColor>
           {`↑↓ ${scrollOffset + effectiveViewport}/${totalLines}`.padStart(
